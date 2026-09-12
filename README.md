@@ -10,24 +10,17 @@ the engine maintainers, so read anything you intend to run.
 
 ## Building
 
-You need JDK 25. The engine API is not on Maven Central, so download the two
-jars from the [script-api releases](https://github.com/iEasyScript/script-api/releases)
-and drop them in `libs/`:
-
-```
-libs/projectx-engine-api-<version>.jar
-libs/projectx-core-<version>.jar
-```
-
-Then build and install:
+Open the folder in IntelliJ IDEA and let the Gradle sync finish, or run:
 
 ```bash
 ./gradlew installScripts
 ```
 
-That compiles the jar and copies it to `~/.projectx/scripts/`, where the engine
-loads it on startup. To build without installing, run `./gradlew jar` and find
-the jar in `build/libs/`.
+The build downloads the [script API](https://github.com/iEasyScript/script-api)
+itself (the version is in `gradle.properties`) and, if needed, a JDK 25. It
+compiles the jar and copies it to `~/.projectx/scripts/`, where the engine loads
+it on startup. To build without installing, run `./gradlew jar` and find the jar
+in `build/libs/`.
 
 ## Writing a script
 

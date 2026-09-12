@@ -31,7 +31,7 @@ To build without installing, run `./gradlew jar` and find the jar in
 
 ## Writing a script
 
-Scripts extend the engine's script types and are registered by annotation. Start
+Read the [full guide](https://github.com/iEasyScript/script-api/blob/main/WRITING-SCRIPTS.md) in the script-api repository, and start from the [starter template](https://github.com/iEasyScript/script-api). Existing scripts in `src/main/kotlin/com/projectx/script/impl/` are also good reference.
 from an existing script in `src/main/kotlin/com/projectx/script/impl/` — the
 shapes there are the fastest way in. The API surface is documented in the
 [script-api](https://github.com/iEasyScript/script-api) repository.

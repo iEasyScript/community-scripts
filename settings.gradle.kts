@@ -1,1 +1,1 @@
-rootProject.name = "community-scripts"
+rootProject.name = "official-scripts"

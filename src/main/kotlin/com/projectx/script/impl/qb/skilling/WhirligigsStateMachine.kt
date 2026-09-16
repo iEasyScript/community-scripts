@@ -16,8 +16,8 @@ import com.projectx.script.BooleanConfigItem
 
 @ScriptDescription(
 	name = "Whirligigs State Machine",
-	version = "1.0.0",
-	author = "QB",
+	version = "1.0.1",
+	author = "Query",
 	description = "Fully automated whirligigs using state machine pattern",
 )
 class WhirligigsStateMachine : StateMachineScript<WhirligigsStateMachine>(), ConfigurableScript {

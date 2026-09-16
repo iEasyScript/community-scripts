@@ -16,8 +16,8 @@ import com.projectx.script.event.impl.Chat
 
 @ScriptDescription(
 	name = "CroesusSoups",
-	version = "1.0.0",
-	author = "QB",
+	version = "1.0.1",
+	author = "Query",
 	description = "Cooks using presets"
 )
 class CroesusSoups : StateMachineScript<CroesusSoups>() {

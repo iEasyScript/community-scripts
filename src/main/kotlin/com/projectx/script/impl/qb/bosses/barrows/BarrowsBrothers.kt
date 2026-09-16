@@ -12,7 +12,7 @@ import com.projectx.script.api.Area.Rectangular
 import com.projectx.traversal.Traversal.Companion.traversal
 import com.projectx.util.random
 
-@ScriptDescription(name = "Barrows Sisters", version = "1.0.0", author = "QB", description = "Nope")
+@ScriptDescription(name = "Barrows Sisters", version = "1.0.1", author = "Query", description = "Nope")
 class BarrowsBrothers : StateMachineScript<BarrowsBrothers>() {
     override fun getStartState(): State<BarrowsBrothers> {
         return Banking()

@@ -16,8 +16,8 @@ import com.projectx.script.ConfigItem
 
 @ScriptDescription(
 	name = "Bowls of water",
-	version = "1.0.0",
-	author = "QB",
+	version = "1.0.1",
+	author = "Query",
 	description = "Fully automated bowls of water using state machine pattern",
 )
 class BowlsOfWaterStateMachine : StateMachineScript<BowlsOfWaterStateMachine>(), ConfigurableScript {

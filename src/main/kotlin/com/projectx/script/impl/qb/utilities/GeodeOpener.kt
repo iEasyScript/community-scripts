@@ -9,8 +9,8 @@ import com.projectx.script.ScriptDescription
 
 @ScriptDescription(
     name = "Geode Opener",
-    version = "1.0.0",
-    author = "QB",
+    version = "1.0.1",
+    author = "Query",
     description = "Opens geodes"
 )
 class GeodeOpener : StateMachineScript<GeodeOpener>() {

@@ -30,8 +30,8 @@ import com.projectx.traversal.nodes.NpcNode
 
 @ScriptDescription(
 	name = "Fishing State Machine",
-	version = "1.0.0",
-	author = "QB",
+	version = "1.0.1",
+	author = "Query",
 	description = "Fully automated fishing using state machine pattern",
 )
 class FishingStateMachine : StateMachineScript<FishingStateMachine>(), ConfigurableScript {

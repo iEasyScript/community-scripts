@@ -22,8 +22,8 @@ private val atGe get() = Tile.of(3162, 3463, 0).withinDistance(localPlayer.tile,
 
 @ScriptDescription(
     name = "Clues State Machine",
-    version = "1.0.0",
-    author = "QB",
+    version = "1.0.1",
+    author = "Query",
     description = "Fully automated clues using state machine pattern",
 )
 class CluesStateMachine : StateMachineScript<CluesStateMachine>(), ConfigurableScript {

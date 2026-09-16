@@ -39,8 +39,8 @@ import com.projectx.script.api.depositAllInventory
 
 @ScriptDescription(
 	name = "Mining State Machine",
-	version = "2.0.0",
-	author = "QB",
+	version = "2.0.1",
+	author = "Query",
 	description = "Fully automated mining with rockertunity detection, ore box support, and enhanced travel system",
 )
 class MiningStatesScript : StateMachineScript<MiningStatesScript>(), ConfigurableScript {

@@ -12,8 +12,8 @@ import kotlin.random.Random
 
 @ScriptDescription(
     name = "Shattered Worlds",
-    version = "1.0.0",
-    author = "QB",
+    version = "1.0.1",
+    author = "Query",
     description = "Automated Shattered Worlds script with task system support",
 )
 class ShatteredWorldsScript : StateMachineScript<ShatteredWorldsScript>(), ConfigurableScript {

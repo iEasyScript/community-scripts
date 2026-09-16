@@ -13,8 +13,8 @@ import com.projectx.script.api.*
 
 @ScriptDescription(
 	name = "Lamp Opener",
-	version = "1.0.0",
-	author = "QB",
+	version = "1.0.1",
+	author = "Query",
 	description = "Opens lamps and uses them on skill"
 )
 class XPLamps : StateMachineScript<XPLamps>(), ConfigurableScript {

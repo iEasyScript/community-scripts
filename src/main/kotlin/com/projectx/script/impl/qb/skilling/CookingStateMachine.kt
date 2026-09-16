@@ -22,7 +22,7 @@ import com.projectx.traversal.Traversal.Companion.traversal
 import com.projectx.script.ConfigItem
 
 @ScriptDescription(
-	name = "CookingStateMachine", version = "1.0.0", author = "QB", description = "Cooks using last preset"
+	name = "CookingStateMachine", version = "1.0.1", author = "Query", description = "Cooks using last preset"
 )
 class CookingStateMachine : StateMachineScript<CookingStateMachine>(), ConfigurableScript {
 	val worldHop = BooleanConfigItem(

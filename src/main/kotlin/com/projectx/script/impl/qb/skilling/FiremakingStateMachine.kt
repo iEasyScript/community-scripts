@@ -16,7 +16,7 @@ import com.projectx.script.ConfigItem
 import com.projectx.script.ConfigurableScript
 
 @ScriptDescription(
-	name = "Firemaking", version = "1.0.0", author = "QB", description = "Firemaking"
+	name = "Firemaking", version = "1.0.1", author = "Query", description = "Firemaking"
 )
 class Firemaking : StateMachineScript<Firemaking>(), ConfigurableScript {
 	override fun getStartState(): State<Firemaking> = FiremakingState()

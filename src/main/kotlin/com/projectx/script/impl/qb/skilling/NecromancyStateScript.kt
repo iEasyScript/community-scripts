@@ -41,8 +41,8 @@ private val NECROMANCY_POT_MINUTES_UNTIL_REFIL = 10
 
 @ScriptDescription(
     name = "NecromancyStateScript",
-    version = "1.0",
-    author = "QB",
+    version = "1.0.1",
+    author = "Query",
     description = "Does all the necromancy rituals."
 )
 class NecromancyStateScript : StateMachineScript<NecromancyStateScript>(), ConfigurableScript {

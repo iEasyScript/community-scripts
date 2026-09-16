@@ -16,8 +16,8 @@ import com.projectx.script.impl.qb.Quest.seersLodestone
 
 @ScriptDescription(
 	name = "Woodcutting State Machine",
-	version = "2.0.0",
-	author = "QB",
+	version = "2.0.1",
+	author = "Query",
 	description = "Fully automated woodcutting with woodbox support and traversal-based movement",
 )
 class WoodcuttingStateScript : StateMachineScript<WoodcuttingStateScript>(), ConfigurableScript {

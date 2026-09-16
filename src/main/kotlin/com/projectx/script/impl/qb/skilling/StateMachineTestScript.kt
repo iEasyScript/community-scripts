@@ -16,8 +16,8 @@ import com.projectx.script.ConfigItem
 
 @ScriptDescription(
 	name = "STATE MACHINE TEST",
-	version = "1.0.0",
-	author = "QB",
+	version = "1.0.1",
+	author = "Query",
 	description = "STATE MACHINE TEST",
 )
 class StateMachineTestScript : StateMachineScript<StateMachineTestScript>(), ConfigurableScript {

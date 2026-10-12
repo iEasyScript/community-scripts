@@ -2,6 +2,8 @@ plugins {
     java
     kotlin("jvm") version "2.4.0"
     kotlin("plugin.serialization") version "2.4.0"
+    // Scripts that draw their own panel (ComposePanel) are Compose code.
+    kotlin("plugin.compose") version "2.4.0"
 }
 
 group = "com.projectx"
@@ -11,6 +13,8 @@ repositories {
     // com.projectx is excluded from the public repository so it can only ever come from the
     // release repository below - the same guarantee the exclusiveContent block used to give.
     mavenCentral { content { excludeGroup("com.projectx") } }
+    // Compose's androidx runtime libraries are published here.
+    google { content { excludeGroup("com.projectx") } }
     // The script API is published as GitHub release assets, not to Maven Central. The ivy
     // descriptor is what lets the IDE find the -sources jar next to the jar: with artifact-only
     // metadata Gradle has nothing to read and never looks for sources. Releases published before
@@ -39,6 +43,8 @@ dependencies {
     val projectxApi = providers.gradleProperty("projectxApiVersion").get()
     compileOnly("com.projectx:projectx-engine-api:$projectxApi")
     compileOnly("com.projectx:projectx-core:$projectxApi")
+    // The engine ships Compose, so like the API it is compileOnly. Matches the engine's version.
+    compileOnly("org.jetbrains.compose.desktop:desktop:1.12.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")

@@ -31,12 +31,15 @@ object Excavation : HollowActivity {
     private const val RANGE = 30
     private const val SPRITE_PATCH = 2
     private const val MIN_FREE_SLOTS = 2
+    private const val TICK_MS = 600
 
     private val DIG_ANIMATIONS = setOf(35906, 35907)
     private val BONES = intArrayOf(57578, 57579, 57580, 57581, 57582, 57583)
     private val ARTEFACTS = intArrayOf(57586, 57587, 57588, 57589, 57590)
 
     private var digging: Tile? = null
+    private var pendingSprite: Tile? = null
+    private var followAt = 0L
     private var dug = 0
     private var contributed = 0
     private var status = "Starting"
@@ -44,6 +47,7 @@ object Excavation : HollowActivity {
 
     override fun begin() {
         digging = null
+        pendingSprite = null
         dug = 0
         contributed = 0
         status = "Starting"
@@ -75,6 +79,14 @@ object Excavation : HollowActivity {
 
         val sprite = if (settings.followSprite.value) timeSpriteTile(RANGE) else null
         val current = digging
+        if (sprite != null && (current == null || !sprite.withinDistance(current, SPRITE_PATCH)) && !followDue(sprite, settings)) {
+            val ticks = ((followAt - System.currentTimeMillis()) / TICK_MS + 1).coerceAtLeast(1)
+            status = "Sprite moved: following in $ticks tick${if (ticks == 1L) "" else "s"}"
+            script.delayUntil((followAt - System.currentTimeMillis()).coerceAtLeast(1L)) {
+                timeSpriteTile(RANGE)?.withinDistance(sprite, SPRITE_PATCH) != true
+            }
+            return true
+        }
         if (isDigging() && current != null && (sprite == null || sprite.withinDistance(current, SPRITE_PATCH))) {
             status = if (sprite != null) "Digging where the sprite sits" else "Digging the remains"
             script.delayUntil(gaussian(4000L, 700L)) {
@@ -96,6 +108,23 @@ object Excavation : HollowActivity {
 
     private fun isDigging() = localPlayer.animationId in DIG_ANIMATIONS
 
+    /**
+     * Whether the wait before following a sprite to [sprite] is over. A sprite seen somewhere new starts a wait of a
+     * random number of ticks between the two settings, so the move reads as a reaction rather than a reflex.
+     */
+    private fun followDue(sprite: Tile, settings: HollowSettings): Boolean {
+        val now = System.currentTimeMillis()
+        val waitingFor = pendingSprite
+        if (waitingFor == null || !waitingFor.withinDistance(sprite, SPRITE_PATCH)) {
+            val low = minOf(settings.spriteDelayMin.value, settings.spriteDelayMax.value)
+            val high = maxOf(settings.spriteDelayMin.value, settings.spriteDelayMax.value)
+            val ticks = (low..high).random()
+            pendingSprite = sprite
+            followAt = if (ticks == 0) now else now + ticks * TICK_MS + gaussian(0, 90).coerceIn(-150, 150)
+        }
+        return now >= followAt
+    }
+
     private fun remainsAt(sprite: Tile?): SceneObject? =
         sprite?.let { at -> findClosestObject(RANGE) { it.id == REMAINS && it.tile.withinDistance(at, SPRITE_PATCH) } }
 
@@ -109,6 +138,7 @@ object Excavation : HollowActivity {
         script.delayUntil(gaussian(9000L, 1500L)) { isDigging() }
         if (isDigging()) {
             digging = remains.tile
+            pendingSprite = null
             dug++
         }
         return true

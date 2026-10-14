@@ -15,7 +15,7 @@ import com.projectx.util.gaussian
 
 @ScriptDescription(
     name = "Harvest Hollow",
-    version = "1.7.1",
+    version = "1.8.0",
     author = "Cryptic",
     description = "Runs the Halloween Harvest Hollow activities: the bonfire, the Smashing Pumpkin, the summoning " +
         "circle, looting the graveyard and digging its Mystery remains. Based on Spade's Harvest Hollow Skiller.",

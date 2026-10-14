@@ -1,6 +1,7 @@
 package com.projectx.script.impl.cryptic.harvesthollow
 
 import com.projectx.script.Script
+import com.projectx.script.api.BankPin
 import com.projectx.script.api.SkillTracker
 import com.projectx.script.api.bank
 import com.projectx.script.api.bankOpen
@@ -56,7 +57,7 @@ object Bonfire : HollowActivity {
     override suspend fun step(script: Script, settings: HollowSettings): Boolean {
         val logs = logsFor(settings)
         val carrying = inventory.hasItem(logs)
-        val carried = if (carrying) burn(script, logs) else restock(script, logs)
+        val carried = if (carrying) burn(script, logs) else restock(script, settings, logs)
         settings.burnedInfo.value = burned.toString()
         return carried
     }
@@ -82,7 +83,7 @@ object Bonfire : HollowActivity {
         return true
     }
 
-    private suspend fun restock(script: Script, logs: Regex): Boolean {
+    private suspend fun restock(script: Script, settings: HollowSettings, logs: Regex): Boolean {
         status = "Fetching logs from the bank chest"
         if (!bankOpen) {
             val chest = findClosestObject(BANK_CHEST, RANGE) ?: return missing(script, "bank chest")
@@ -90,7 +91,15 @@ object Bonfire : HollowActivity {
                 script.delay(gaussian(1200, 350))
                 return true
             }
-            script.delayUntil(gaussian(9000L, 1500L)) { bankOpen }
+            script.delayUntil(gaussian(9000L, 1500L)) { bankOpen || BankPin.isOpen }
+            if (BankPin.isOpen) {
+                status = if (settings.bankPinOrNull() != null) "Entering the bank PIN" else "Enter your bank PIN"
+                if (!script.passBankPin(settings)) {
+                    status = "The bank PIN was refused"
+                    return false
+                }
+                script.delayUntil(gaussian(4000L, 800L)) { bankOpen }
+            }
             if (!bankOpen) return true
             script.delay(gaussian(320, 110))
         }

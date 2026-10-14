@@ -46,12 +46,12 @@ class HollowSettings : ConfigHolder {
     )
     val bankPin = StringConfigItem(
         "Bank PIN",
-        "Four digits, entered when Eep asks for your PIN. Leave blank to type it yourself; the script waits.",
+        "Four digits, typed in whenever the bank chest or Eep asks for your PIN. Leave blank to type it yourself; the script waits.",
         "",
     )
 
     private val ownedBy: Map<Activity, Set<ConfigItem<*>>> = mapOf(
-        Activity.BONFIRE to setOf(logs, burnedInfo),
+        Activity.BONFIRE to setOf(logs, burnedInfo, bankPin),
         Activity.SMASHING_PUMPKIN to setOf(smashTarget, smashedInfo),
         Activity.THIEVING to setOf(handInLoot, handInAt),
         Activity.ARCHAEOLOGY to setOf(followSprite, spriteDelayMin, spriteDelayMax, identifyAt, bankPin),
@@ -59,10 +59,11 @@ class HollowSettings : ConfigHolder {
 
     fun bankPinOrNull(): String? = bankPin.value.trim().takeIf { it.length == 4 && it.all(Char::isDigit) }
 
-    /** An activity's own settings show only while it is the one selected; shared ones always show. */
+    /** An activity's own settings show only while it is selected; settings no activity owns always show. */
     fun isVisible(item: ConfigItem<*>): Boolean {
-        val owner = ownedBy.entries.firstOrNull { item in it.value }?.key ?: return true
+        val owners = ownedBy.filterValues { item in it }.keys
+        if (owners.isEmpty()) return true
         if ((item === spriteDelayMin || item === spriteDelayMax) && !followSprite.value) return false
-        return owner == activity.value
+        return activity.value in owners
     }
 }

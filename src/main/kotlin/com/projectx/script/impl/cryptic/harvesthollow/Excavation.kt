@@ -5,7 +5,6 @@ import com.projectx.game.nxt.entity.location.SceneObject
 import com.projectx.script.Script
 import com.projectx.script.api.BankPin
 import com.projectx.script.api.SkillTracker
-import com.projectx.script.api.enterBankPin
 import com.projectx.script.api.findClosestNPC
 import com.projectx.script.api.findClosestObject
 import com.projectx.script.api.interfaces
@@ -194,7 +193,11 @@ object Excavation : HollowActivity {
         if (IFSlot(HOARD, CONTRIBUTE, CONTRIBUTE_BUTTON).click(1)) {
             script.delayUntil(gaussian(3000L, 600L)) { BankPin.isOpen || collection.held() < before }
             if (BankPin.isOpen) {
-                if (!passBankPin(script, settings)) return false
+                status = if (settings.bankPinOrNull() != null) "Entering the bank PIN" else "Enter your bank PIN"
+                if (!script.passBankPin(settings)) {
+                    status = "The bank PIN was refused"
+                    return false
+                }
                 script.delayUntil(gaussian(3000L, 600L)) { collection.held() < before }
             }
         }
@@ -230,21 +233,5 @@ object Excavation : HollowActivity {
         trip = null
         handInDue = false
         return true
-    }
-
-    /** False when a PIN from the settings was refused; retrying a wrong PIN locks the bank. */
-    private suspend fun passBankPin(script: Script, settings: HollowSettings): Boolean {
-        val pin = settings.bankPinOrNull()
-        if (pin == null) {
-            if (settings.bankPin.value.isNotBlank()) script.log("The Bank PIN setting must be four digits; waiting for you to type it.")
-            status = "Enter your bank PIN"
-            script.delayUntil(gaussian(90_000L, 10_000L)) { !BankPin.isOpen }
-            return true
-        }
-        status = "Entering the bank PIN"
-        if (script.enterBankPin(pin)) return true
-        status = "The bank PIN was refused"
-        script.log("The bank did not accept the Bank PIN setting; stopping.")
-        return false
     }
 }

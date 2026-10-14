@@ -39,14 +39,25 @@ class HollowSettings : ConfigHolder {
         "The longest wait before following the sprite; each move picks a random wait between the two.",
         3, 0, 50,
     )
-    val identifyAt = IntConfigItem("Identify remains at", "Identifies the Ancient remains once this many are carried.", 10, 1, 100000)
+    val identifyAt = IntConfigItem(
+        "Identify remains at",
+        "Identifies the Ancient remains once this many are carried, then hands the finds to Eep.",
+        10, 1, 100000,
+    )
+    val bankPin = StringConfigItem(
+        "Bank PIN",
+        "Four digits, entered when Eep asks for your PIN. Leave blank to type it yourself; the script waits.",
+        "",
+    )
 
     private val ownedBy: Map<Activity, Set<ConfigItem<*>>> = mapOf(
         Activity.BONFIRE to setOf(logs, burnedInfo),
         Activity.SMASHING_PUMPKIN to setOf(smashTarget, smashedInfo),
         Activity.THIEVING to setOf(handInLoot, handInAt),
-        Activity.ARCHAEOLOGY to setOf(followSprite, spriteDelayMin, spriteDelayMax, identifyAt),
+        Activity.ARCHAEOLOGY to setOf(followSprite, spriteDelayMin, spriteDelayMax, identifyAt, bankPin),
     )
+
+    fun bankPinOrNull(): String? = bankPin.value.trim().takeIf { it.length == 4 && it.all(Char::isDigit) }
 
     /** An activity's own settings show only while it is the one selected; shared ones always show. */
     fun isVisible(item: ConfigItem<*>): Boolean {

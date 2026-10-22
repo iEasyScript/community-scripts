@@ -17,7 +17,7 @@ import com.projectx.util.random
 
 @ScriptDescription(
     name = "Quest Helper",
-    version = "1.1",
+    version = "1.1.1",
     author = "Billythebob, Query",
     description = "Comprehensive quest helper with dialog management and automated quest execution."
 )

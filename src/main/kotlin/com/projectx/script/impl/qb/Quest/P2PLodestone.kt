@@ -4,8 +4,6 @@ import world.gregs.voidps.type.Tile
 import com.projectx.script.*
 import com.projectx.script.api.*
 import com.projectx.traversal.Traversal.Companion.traversal
-import com.projectx.game.interfaces.IFSlot
-import com.projectx.traversal.nodes.DoorInfo
 import com.projectx.util.*
 
 class P2PLodestone : State<DebugScript>() {
@@ -98,80 +96,11 @@ val yanilleLodestone: Boolean get() = varps.getVarBit(40) == 1
 val ooglogLodestone: Boolean get() = varps.getVarBit(18527) == 1
 val karamjaLodestone: Boolean get() = varps.getVarBit(18526) == 1
 
-val pathSarimKaramjaPort: List<Tile> = listOf(
-	Tile.of(3010, 3214, 0),
-	Tile.of(3027, 3218, 0)
-)
-
-val pathPortKaramjaGate: List<Tile> = listOf(
-	Tile.of(2956, 3147, 0),
-	Tile.of(2907, 3153, 0),
-	Tile.of(2882, 3155, 0),
-	Tile.of(2853, 3149, 0),
-	Tile.of(2825, 3149, 0),
-	Tile.of(2818, 3182, 0)
-)
-
-val karamjaGateSouth = DoorInfo(
-	realIdOpen = 24373,
-	realIdClosed = 24369,
-
-	locationOpen = Tile.of(2815, 3182, 0),
-	locationClosed = Tile.of(2816, 3182, 0),
-
-	tileInside = Tile.of(2815, 3182, 0),
-	tileOutside = Tile.of(2816, 3182, 0)
-)
-
-val karamjaGateNorth = DoorInfo(
-	realIdOpen = 24374,
-	realIdClosed = 24370,
-
-	locationOpen = Tile.of(2815, 3183, 0),
-	locationClosed = Tile.of(2816, 3183, 0),
-
-	tileInside = Tile.of(2815, 3183, 0),
-	tileOutside = Tile.of(2816, 3183, 0)
-
-)
-
-val pathKaramjaLodestone: List<Tile> = listOf(
-	Tile.of(2813, 3183, 0),
-	Tile.of(2793, 3178, 0),
-	Tile.of(2781, 3186, 0),
-	Tile.of(2764, 3184, 0),
-	Tile.of(2763, 3149, 0)
-)
-
+private val karamjaLodestoneTile = Tile.of(2763, 3149, 0)
 
 private val handleKaramja
 	get() = traversal(P2PLodestone(), { karamjaLodestone }) {
-
-		chebychevPath(
-			localPlayer.tile,
-			pathSarimKaramjaPort,
-			fallback = { useLodestone(Lodestone.PORT_SARIM) },
-			reached = { localPlayer.tile.getDistance(pathSarimKaramjaPort.last()) < 5 })
-
-		interactNpc(376, "Pay fare") { interfaces.isOpen(1184) }
-		clickIFSlot(IFSlot(1184, 15, -1), 0) { interfaces.isOpen(1188) }
-		clickIFSlot(IFSlot(1188, 8, -1), 0) { !interfaces.isOpen(1188) }
-		clickIFSlot(IFSlot(1191, 15, -1), 0) { localPlayer.tile.getDistance(pathPortKaramjaGate.first()) < 5 }
-
-		chebychevPath(
-			localPlayer.tile,
-			pathPortKaramjaGate,
-			reached = { localPlayer.tile.getDistance(pathPortKaramjaGate.last()) < 5 })
-		if (random(1, 2) == 1) {
-			doorIn(karamjaGateNorth, reached = { localPlayer.tile.matches(karamjaGateNorth.tileInside) })
-		} else {
-			doorIn(karamjaGateSouth, reached = { localPlayer.tile.matches(karamjaGateSouth.tileInside) })
-		}
-
-		chebychevPath(
-			localPlayer.tile,
-			pathKaramjaLodestone,
-			reached = { localPlayer.tile.getDistance(pathKaramjaLodestone.last()) < 5 })
+		webWalk(karamjaLodestoneTile, reached = { localPlayer.tile.getDistance(karamjaLodestoneTile) < 5 })
 		interactObj(84751, "Activate") { karamjaLodestone }
 	}
 

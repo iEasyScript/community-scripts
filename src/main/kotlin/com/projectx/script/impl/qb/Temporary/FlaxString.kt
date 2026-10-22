@@ -13,7 +13,7 @@ private val bowstring = Regex(".*bowstring$", RegexOption.IGNORE_CASE)
 
 @ScriptDescription(
     name = "Flax Stringer",
-    version = "1.0.0",
+    version = "1.0.1",
     author = "Billy",
     description = "Picks flax and strings it into bowstrings at starting area."
 )
@@ -43,15 +43,16 @@ object SpinFlax: State<FlaxString>() {
     }
 
     override suspend fun FlaxString.stateLoop() {
-        if(localPlayer.isAnimating) return
-        if(hasActiveMakeXProgress) return
-        if (!makeXOpen) {
-            interactClosestObject("Spinning wheel","Spin", 100)
-            delayUntil(8000) { makeXOpen }
+        if (localPlayer.isAnimating || MakeX.inProgress) return
+        if (!MakeX.isOpen) {
+            if (interactClosestObject("Spinning wheel", "Spin", 100)) delayUntil(8000) { MakeX.isOpen }
+            else delay(600, 200)
             return
         }
-        continueMakeX()
-        delayUntil(2500) { !inventory.hasItem(flax) }
+        if (!makeX({ it.equals("Bowstring", ignoreCase = true) })) {
+            println("[Flax Stringer] The spinning wheel offers no Bowstring to make; stopping")
+            stop()
+        }
     }
 }
 

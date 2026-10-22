@@ -23,7 +23,7 @@ import com.projectx.util.*
 
 @ScriptDescription(
     name = "Cerberus Token Farmer",
-    version = "1.0.0",
+    version = "1.0.1",
     author = "Trent",
     description = "Kills Cerberus in OSRS from RS3"
 )
@@ -76,15 +76,24 @@ class CerbTokenFarm : StateMachineScript<CerbTokenFarm>() {
 }
 
 object Enter : State<CerbTokenFarm>() {
-    override suspend fun CerbTokenFarm.checkNext() = if (!Tile.of(1761, 1343, 0).withinDistance(localPlayer.tile)) RunToCerb() else null
+    private val entrance = Tile.of(1761, 1343, 0)
+
+    private val offeredToRejoinGroup get() = dialogueOptionVisible("Yes.") && dialogueOptionVisible("No.")
+
+    override suspend fun CerbTokenFarm.checkNext() = if (!entrance.withinDistance(localPlayer.tile)) RunToCerb() else null
 
     override suspend fun CerbTokenFarm.stateLoop() {
+        if (offeredToRejoinGroup) {
+            if (continueDialogueContaining("No.")) delayUntil(10000) { !offeredToRejoinGroup }
+            else delay(600, 200)
+            return
+        }
         if (continueDialogueContaining("Normal mode")) {
-            delayUntil { !Tile.of(1761, 1343, 0).withinDistance(localPlayer.tile) }
+            delayUntil { !entrance.withinDistance(localPlayer.tile) }
             return
         }
         if (interactClosestReachableObject("The Zamorakian Undercity", "Enter"))
-            delayUntil(20000) { dialogueOptions.contains("Normal mode") }
+            delayUntil(20000) { dialogueOptionVisible("Normal mode") || offeredToRejoinGroup }
     }
 }
 

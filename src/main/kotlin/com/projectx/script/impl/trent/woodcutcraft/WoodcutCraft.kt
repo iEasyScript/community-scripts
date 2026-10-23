@@ -1,7 +1,10 @@
 package com.projectx.script.impl.trent.woodcutcraft
 
 import com.projectx.game.nxt.entity.location.SceneObject
+import com.projectx.script.ConfigurableScript
+import com.projectx.script.EnumConfigItem
 import com.projectx.script.ScriptDescription
+import com.projectx.script.StringConfigItem
 import com.projectx.script.State
 import com.projectx.script.StateMachineScript
 import com.projectx.script.api.*
@@ -9,26 +12,62 @@ import com.projectx.script.event.Event
 import com.projectx.script.event.impl.ManualDoAction
 import com.projectx.game.interfaces.IFSlot
 import com.projectx.util.gaussian
+import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.gameval.Gameval
+import world.gregs.voidps.type.Tile
 
 @ScriptDescription(
     name = "WoodcutCraft",
-    version = "1.1.1",
+    version = "1.2.0",
     author = "Trent",
     description = "Cuts the tree you click (or the nearest one), then fletches the logs into the best-experience item " +
-        "you can make and disassembles it for Invention, and goes again."
+        "you can make, disassembles it for Invention or banks it, and goes again."
 )
-class WoodcutCraft : StateMachineScript<WoodcutCraft>() {
+class WoodcutCraft : StateMachineScript<WoodcutCraft>(), ConfigurableScript {
+    val fullPack = EnumConfigItem(
+        "When the pack is full",
+        "What to do with the fletched items. Auto disassembles them once you have unlocked Invention and banks them before that.",
+        FullPack.entries.toTypedArray(),
+        FullPack.AUTO,
+    )
+    val bankPin = StringConfigItem("Bank PIN", "Typed for you when the bank asks for it. Leave it empty to type it yourself.", "")
+
     lateinit var treeName: String
+    var treeSpot: Tile? = null
     fun selectedTreeName() = ::treeName.isInitialized
 
+    fun selectTree(tree: SceneObject) {
+        treeName = tree.name()
+        treeSpot = tree.tile
+    }
+
+    val banksProducts: Boolean
+        get() = when (fullPack.value) {
+            FullPack.AUTO -> getXp(Skill.INVENTION) == 0
+            FullPack.BANK -> true
+            FullPack.DISASSEMBLE -> false
+        }
+
+    val productsState: State<WoodcutCraft> get() = if (banksProducts) BankProducts else Disassemble
+
+    val validBankPin: String?
+        get() = bankPin.value.trim().takeIf { it.length == 4 && it.all(Char::isDigit) }
+
     override fun getStartState() = Init
+}
+
+enum class FullPack(private val label: String) {
+    AUTO("Auto"),
+    DISASSEMBLE("Disassemble"),
+    BANK("Bank");
+
+    override fun toString() = label
 }
 
 object Init: State<WoodcutCraft>() {
     override suspend fun WoodcutCraft.checkNext(): State<WoodcutCraft>? = when {
         inventory.count(logs) >= 2 && inventory.isFull -> Craft
-        inventory.hasItem(unf) && inventory.isFull -> Disassemble
+        inventory.hasItem(unf) && inventory.isFull -> productsState
         selectedTreeName() -> Woodcut
         else -> null
     }
@@ -39,7 +78,7 @@ object Init: State<WoodcutCraft>() {
             delay(600, 200)
             return
         }
-        treeName = nearest.name()
+        selectTree(nearest)
         log("Cutting ${nearest.name()}; click another tree to change it.")
     }
 
@@ -47,7 +86,7 @@ object Init: State<WoodcutCraft>() {
         if (event !is ManualDoAction || event.target !is SceneObject) return
         val obj = event.target as SceneObject
         if (!selectedTreeName() && obj.chopOption() != null)
-            treeName = obj.name()
+            selectTree(obj)
     }
 }
 
@@ -58,6 +97,7 @@ private val CHOP_OPTIONS = listOf("Chop down", "Cut down")
 private fun SceneObject.chopOption() = CHOP_OPTIONS.firstOrNull { hasOption(it) }
 
 private const val TREE_RANGE = 20
+private const val TREE_ARRIVE_DISTANCE = 5
 
 /** The tool that fletches, as the "What do you want to do with the logs?" window names it. */
 private const val FLETCH_WITH = "Knife"
@@ -87,12 +127,17 @@ private object ObjectChoice {
 private val BEST_PRODUCTS = listOf("longbow (unstrung)", "shortbow (unstrung)", " stock", "arrow shaft")
 
 object Woodcut: State<WoodcutCraft>() {
-    override suspend fun WoodcutCraft.checkNext() = if (inventory.isFull) if (inventory.hasItem(unf)) Disassemble else Craft else null
+    override suspend fun WoodcutCraft.checkNext() = if (inventory.isFull) if (inventory.hasItem(unf)) productsState else Craft else null
 
     override suspend fun WoodcutCraft.stateLoop() {
         captureSerenSpirit()
         if (localPlayer.isAniMoving) return
-        val tree = findClosestReachableObject(TREE_RANGE) { it.name() == treeName && it.chopOption() != null } ?: return
+        val tree = findClosestReachableObject(TREE_RANGE) { it.name() == treeName && it.chopOption() != null }
+        if (tree == null) {
+            treeSpot?.let { webWalk(it, TREE_ARRIVE_DISTANCE) }
+            delay(600, 200)
+            return
+        }
         val option = tree.chopOption() ?: return
         if (!tree.interact(option)) return
         delayUntil(15592) { localPlayer.isAnimating || !tree.exists }
@@ -145,6 +190,24 @@ object Disassemble: State<WoodcutCraft>() {
         if (localPlayer.isAnimating) return
         if (inventory.getItem(unf)?.disassemble() == true)
             delayUntil(timeoutMillis = 50000) { !inventory.hasItem(unf) }
+        else delay(600, 200)
+    }
+}
+
+object BankProducts: State<WoodcutCraft>() {
+    override suspend fun WoodcutCraft.checkNext() = if (!inventory.hasItem(unf)) Init else null
+
+    override suspend fun WoodcutCraft.stateLoop() {
+        if (localPlayer.isMoving) return
+        if (!bankOpen) {
+            if (!openNearestBank(validBankPin)) {
+                log("Couldn't reach or open a bank; stopping.")
+                stop()
+            }
+            return
+        }
+        val before = inventory.count(unf)
+        if (depositBankItem(unf)) delayUntil(gaussian(2500L, 500L)) { inventory.count(unf) < before }
         else delay(600, 200)
     }
 }

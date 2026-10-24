@@ -12,7 +12,6 @@ import com.projectx.script.api.varps
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
 import com.projectx.script.event.impl.Varp
-import com.projectx.script.impl.trent.dungeoneering.auto.DungeonNavigator
 import com.projectx.script.impl.trent.dungeoneering.map.MapWorldCalibration
 import com.projectx.util.gaussian
 
@@ -105,12 +104,7 @@ object DungeonContext {
         return newSession(seed)
     }
 
-    // Doors written off as refused are a per-floor judgement; carrying them into the next floor blacklists
-    // tiles that belong to a different dungeon entirely.
-    private fun newSession(seed: Int): DungeonSession {
-        DungeonNavigator.forgetRefusedDoors()
-        return DungeonSession(seed).also { session = it }
-    }
+    private fun newSession(seed: Int): DungeonSession = DungeonSession(seed).also { session = it }
 
     private suspend fun examinePump(script: Script, active: DungeonSession, examineSpacingMs: Int) {
         val target = scanner.skillDoors.firstOrNull { active.doors.shouldExamine(it.key) } ?: return

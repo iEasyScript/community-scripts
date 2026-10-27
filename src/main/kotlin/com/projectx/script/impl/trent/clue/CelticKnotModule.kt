@@ -87,7 +87,16 @@ class CelticKnotModule : ClueModule {
                 val button = rectOf(id, move.buttonComponent) ?: return@forEach
                 drawButton(button, label(move))
             }
-            rectOf(id, state.layout.windowComponent)?.let { panel(it, lines(state), accent(state)) }
+        }
+    }
+
+    override fun readout(): ClueReadout? {
+        val state = solution ?: return null
+        if (interfaceId < 0 || !isOpen(interfaceId)) return null
+        return when {
+            !state.solvable -> ClueReadout(name, "Unsolvable", ClueTone.FAILED, lines(state))
+            state.solved -> ClueReadout(name, "Solved", ClueTone.DONE, lines(state))
+            else -> ClueReadout(name, "${state.moves.size} turns", ClueTone.WORKING, lines(state))
         }
     }
 
@@ -119,7 +128,6 @@ class CelticKnotModule : ClueModule {
     }
 
     private fun lines(state: KnotSolution) = buildList {
-        add(name)
         add("Crossings ${state.aligned}/${state.alignedCrossings.size}")
         when {
             !state.solvable -> add("No rotation aligns this knot")
@@ -127,12 +135,6 @@ class CelticKnotModule : ClueModule {
             else -> state.moves.forEach { add("Track ${it.track.index}: ${label(it)}") }
         }
     }
-
-    private fun accent(state: KnotSolution) = when {
-        !state.solvable -> ImGuiColors.RED
-        state.solved -> ImGuiColors.GREEN
-        else -> ImGuiColors.CYAN
-    } or (255 shl 24)
 
     private fun label(move: KnotRotation) = "${move.steps}x ${if (move.clockwise) "CW" else "CCW"}"
 }

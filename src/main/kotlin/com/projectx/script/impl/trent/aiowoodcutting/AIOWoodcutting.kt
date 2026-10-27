@@ -1,8 +1,14 @@
 package com.projectx.script.impl.trent.aiowoodcutting
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.game.nxt.entity.location.SceneObject
+import com.projectx.script.ComposePanel
 import com.projectx.script.ScriptDescription
 import com.projectx.script.State
 import com.projectx.script.StateMachineScript
@@ -12,24 +18,17 @@ import com.projectx.script.event.impl.ManualDoAction
 import com.projectx.script.event.impl.XPDrop
 import com.projectx.traversal.Traversal
 import com.projectx.traversal.Traversal.Companion.traversal
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
-import com.projectx.util.formatElapsedTime
+import com.projectx.ui.compose.components.Hint
+import com.projectx.ui.compose.components.Readout
 import com.projectx.util.gaussian
-import com.projectx.util.getFormattedXpPerHour
-import com.projectx.util.getUnitsPerHour
 
 @ScriptDescription(
     name = "AIO Woodcutting",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Trent",
     description = "Woodcuts at various locations."
 )
-class AIOWoodcutting : StateMachineScript<AIOWoodcutting>() {
+class AIOWoodcutting : StateMachineScript<AIOWoodcutting>(), ComposePanel {
     lateinit var wcSpot: WoodcuttingSpot
     fun hasWcSpot() = ::wcSpot.isInitialized
 
@@ -38,23 +37,18 @@ class AIOWoodcutting : StateMachineScript<AIOWoodcutting>() {
     lateinit var otherOp: String
     fun hasOtherOp() = ::otherOp.isInitialized
 
-    var startTime = 0L
-    var startingXp = 0
-    var logsGained = 0
-
-    override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.WOODCUTTING)
+    private val tracker = SkillTracker(Skill.WOODCUTTING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val location by live<String?>(null) {
+        if (hasWcSpot()) wcSpot.toString() else if (hasOtherName()) otherName else null
     }
 
-    override fun render() {
-        ImGuiDsl.window("AIO Woodcutting") {
-            image(graphicTexture(GraphicIds.WOODCUTTING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("Location: ${if (hasWcSpot()) wcSpot else if (hasOtherName()) otherName else "None yet. Click a tree."}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.WOODCUTTING), startTime)}")
-            text("Logs/h: ${getUnitsPerHour(logsGained, startTime)}")
-            xpProgressBar(Skill.WOODCUTTING)
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val spot = location
+            if (spot != null) Readout(listOf("Location" to spot)) else Hint("No location yet. Click a tree.")
+            SkillTrackerReadout(progress)
         }
     }
 
@@ -63,7 +57,7 @@ class AIOWoodcutting : StateMachineScript<AIOWoodcutting>() {
     override fun onEvent(event: Event) {
         super.onEvent(event)
         if (event !is XPDrop || event.skill != Skill.WOODCUTTING || event.gainedXp < 15) return
-        logsGained++
+        tracker.add("Logs")
     }
 }
 

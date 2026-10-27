@@ -1,49 +1,32 @@
 package com.projectx.script.impl.trent.gemminer
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import org.projectx.core.game.skill.Skill
 import com.projectx.game.chat.MessageType
+import com.projectx.script.ComposePanel
 import com.projectx.script.ScriptDescription
 import com.projectx.script.State
 import com.projectx.script.StateMachineScript
 import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
-import com.projectx.util.formatElapsedTime
 import com.projectx.util.gaussian
-import com.projectx.util.getFormattedXpPerHour
-import com.projectx.util.getUnitsPerHour
 
 @ScriptDescription(
     name = "Gem Miner",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Trent",
     description = "Mines gems in Al Kharid"
 )
-class GemMiner : StateMachineScript<GemMiner>() {
-    var startTime = 0L
-    var startingXp = 0
-
-    override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.MINING)
-    }
+class GemMiner : StateMachineScript<GemMiner>(), ComposePanel {
+    private val tracker = SkillTracker(Skill.MINING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
 
     override fun getStartState() = Mine
 
-    override fun render() {
-        ImGuiDsl.window("Gem Miner") {
-            image(graphicTexture(GraphicIds.MINING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.MINING), startTime)}")
-            xpProgressBar(Skill.MINING)
-        }
-    }
+    @Composable
+    override fun Panel() = SkillTrackerReadout(progress)
 }
 
 private var bagFull = false

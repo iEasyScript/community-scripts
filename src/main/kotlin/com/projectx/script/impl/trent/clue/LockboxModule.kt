@@ -14,9 +14,6 @@ private const val FIRST_CELL_VARBIT = 39624
 /** Squares are components 1..25, one per cell, in row-major order. */
 private const val FIRST_CELL_COMPONENT = 1
 
-/** The modal window, so the read-out sits beside the box instead of across the squares. */
-private const val WINDOW_COMPONENT = 26
-
 /**
  * Lockboxes, interface `lightsout`.
  *
@@ -67,7 +64,21 @@ class LockboxModule : ClueModule {
                 val rect = cellRect(square) ?: continue
                 drawSquare(rect, presses?.getOrNull(square) ?: 0)
             }
-            (rectOf(LOCKBOX_INTERFACE, WINDOW_COMPONENT) ?: cellRect(0))?.let { panel(it, lines(), accent()) }
+        }
+    }
+
+    override fun readout(): ClueReadout? {
+        cellRect(0) ?: return null
+        val current = plan
+        return when {
+            current == null -> ClueReadout(name, "Unsolvable", ClueTone.FAILED, listOf("No sequence solves this board"))
+            current.totalPresses == 0 -> ClueReadout(name, "Solved", ClueTone.DONE, emptyList())
+            else -> ClueReadout(
+                name,
+                "${current.totalPresses} presses",
+                ClueTone.WORKING,
+                listOf("${current.totalPresses} presses left", "${current.presses.count { it > 0 }} squares to press"),
+            )
         }
     }
 
@@ -82,23 +93,4 @@ class LockboxModule : ClueModule {
     }
 
     private fun cellRect(square: Int) = rectOf(LOCKBOX_INTERFACE, FIRST_CELL_COMPONENT + square)
-
-    private fun lines() = buildList {
-        add(name)
-        val current = plan
-        when {
-            current == null -> add("No sequence solves this board")
-            current.totalPresses == 0 -> add("Solved")
-            else -> {
-                add("${current.totalPresses} presses left")
-                add("${current.presses.count { it > 0 }} squares to press")
-            }
-        }
-    }
-
-    private fun accent() = when {
-        plan == null -> ImGuiColors.RED
-        plan?.totalPresses == 0 -> ImGuiColors.GREEN
-        else -> ImGuiColors.CYAN
-    } or (255 shl 24)
 }

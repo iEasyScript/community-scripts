@@ -1,5 +1,10 @@
 package com.projectx.script.impl.qb.combat
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.game.chat.MessageType
@@ -11,20 +16,16 @@ import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
 import com.projectx.script.event.impl.ManualDoAction
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.util.formatElapsedTime
-import com.projectx.util.getFormattedXpPerHour
+import com.projectx.ui.compose.components.Readout
 import java.util.concurrent.atomic.AtomicInteger
 
 @ScriptDescription(
     name = "Combat_QB",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Billy",
     description = "Combat script with GUI, food/potion/loot parallel scripts"
 )
-class QbCombat : StateMachineScript<QbCombat>(), ConfigurableScript {
+class QbCombat : StateMachineScript<QbCombat>(), ConfigurableScript, ComposePanel {
     val eatFoodEnabled = BooleanConfigItem(
         name = "Eat Food",
         description = "Automatically eat food when health is low",
@@ -69,31 +70,34 @@ class QbCombat : StateMachineScript<QbCombat>(), ConfigurableScript {
     lateinit var targetNpcName: String
     fun hasTargetNpc() = ::targetNpcName.isInitialized
 
-    var startTime = 0L
-    var startingXp = 0
     val kills = AtomicInteger(0)
+    private val tracker = SkillTracker(Skill.ATTACK)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val combat by live(emptyList<Pair<String, String>>()) { combatRows() }
 
     var anchorTile: Tile? =null
 
     override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.ATTACK)
         if (eatFoodEnabled.value) addParallelScript(EatFoodParallel())
         if (drinkPotionEnabled.value) addParallelScript(DrinkPotionParallel())
         if (lootEnabled.value) addParallelScript(LootParallel())
     }
 
-    override fun render() {
-        ImGuiDsl.window("QbCombat") {
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("Target NPC: ${if (hasTargetNpc()) targetNpcName else "None selected"}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.ATTACK), startTime)}")
-            text("Kills: ${kills.get()}")
-            if (anchorEnabled.value && anchorTile != null) {
-                text("Anchor Tile: ${anchorTile}")
-                text("Distance from Anchor: ${localPlayer.tile.getDistance(anchorTile!!)}")
-            }
-            xpProgressBar(Skill.ATTACK)
+    private fun combatRows() = buildList {
+        add("Target NPC" to if (hasTargetNpc()) targetNpcName else "None selected")
+        add("Kills" to "${kills.get()}")
+        val anchor = anchorTile
+        if (anchorEnabled.value && anchor != null) {
+            add("Anchor Tile" to "$anchor")
+            add("Distance from Anchor" to "${localPlayer.tile.getDistance(anchor)}")
+        }
+    }
+
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Readout(combat)
+            SkillTrackerReadout(progress)
         }
     }
 

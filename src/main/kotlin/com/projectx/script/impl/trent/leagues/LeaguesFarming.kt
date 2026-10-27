@@ -1,39 +1,30 @@
 package com.projectx.script.impl.trent.leagues
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import org.projectx.core.game.skill.Skill
 import com.projectx.game.chat.MessageType
 import org.projectx.core.game.combat.Effect
 import com.projectx.game.nxt.entity.npc.NPC
+import com.projectx.script.ComposePanel
 import com.projectx.script.Script
 import com.projectx.script.ScriptDescription
 import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.ImGuiDsl.window
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
 import com.projectx.util.*
 
 private val seeds = Regex(".*\\sseed$")
 
 @ScriptDescription(
     name = "Leagues Farming",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Trent",
     description = "Leagues farming"
 )
-class LeaguesFarming : Script() {
-    var startTime = 0L
-    var startingXp = 0
-
-    override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.FARMING)
-    }
+class LeaguesFarming : Script(), ComposePanel {
+    private val tracker = SkillTracker(Skill.FARMING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
 
     override suspend fun loop() {
         val butterfly = findClosestNPC("Guthixian butterfly")
@@ -56,12 +47,6 @@ class LeaguesFarming : Script() {
             delayUntil(gaussian(7820L, 2000L)) { findClosestObject { it.id == 93287 && it.hasOption("Pick") } != null }
     }
 
-    override fun render() {
-        window("Leagues Farmer") {
-            image(graphicTexture(GraphicIds.FARMING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.FARMING), startTime)}")
-            xpProgressBar(Skill.FARMING)
-        }
-    }
+    @Composable
+    override fun Panel() = SkillTrackerReadout(progress)
 }

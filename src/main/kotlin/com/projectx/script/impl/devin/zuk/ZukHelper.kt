@@ -1,10 +1,13 @@
 package com.projectx.script.impl.devin.zuk
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import com.projectx.game.highlight.EntityHighlight
 import com.projectx.game.net.PacketLogger
 import com.projectx.game.nxt.entity.npc.NPC
 import com.projectx.pathfinder.WorldCollision
 import com.projectx.script.BooleanConfigItem
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigSection
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.InfoDisplayConfigItem
@@ -27,25 +30,14 @@ import com.projectx.game.nxt.entity.player.Player
 import com.projectx.script.event.impl.Chat
 import com.projectx.script.event.impl.Hitsplat
 import com.projectx.ui.backend.dsl.ImGuiDsl.backgroundDrawList
-import com.projectx.ui.backend.dsl.ImGuiDsl.setNextWindowPos
-import com.projectx.ui.backend.dsl.ImGuiDsl.setNextWindowSize
-import com.projectx.ui.backend.dsl.ImGuiDsl.window
 import com.projectx.ui.backend.dsl.utils.ImGuiColors
-import com.projectx.ui.backend.flags.ImGuiCond
-import com.projectx.ui.backend.flags.WindowFlags
-import com.projectx.ui.backend.native.ImGuiTexture
-import com.projectx.ui.backend.native.NativeBridge
-import com.projectx.ui.backend.native.graphicTexture
-import world.gregs.voidps.cache.Cache
-import world.gregs.voidps.gameval.Gameval
-import world.gregs.voidps.gameval.Gameval.PARAM
-import world.gregs.voidps.gameval.Gameval.STRUCT
+import com.projectx.ui.compose.components.Hint
 import world.gregs.voidps.type.Tile
 import kotlin.math.abs
 
 @ScriptDescription(
     name = "Zuk Helper",
-    version = "0.1.0",
+    version = "0.2.0",
     author = "Devin",
     description = "Wave/threat HUD, combat-style outlines, mechanic markers, and optional prayer/vuln/defensive " +
         "automation for TzKal-Zuk, normal and hard mode (HM adds wall/challenge/conduit coaching). To work fully " +
@@ -57,7 +49,7 @@ import kotlin.math.abs
         "default - indicators always show so each action can be done manually.",
     category = ScriptCategory.BOSSES
 )
-class ZukHelper : Script(), ConfigurableScript {
+class ZukHelper : Script(), ConfigurableScript, ComposePanel {
 
     val displaySection = ConfigSection("Display")
     val showHud = BooleanConfigItem("Coach HUD", "Prayer to use, the one action to take, and the wave counter.", true)
@@ -154,7 +146,7 @@ class ZukHelper : Script(), ConfigurableScript {
     ).withAction("Run test") { ZukDrill.requestHighlights(); "queued" }
     val hudPreviewInfo = InfoDisplayConfigItem(
         "HUD preview",
-        "Shows the coach card with sample content for 20 seconds, so it can be dragged, resized and positioned before a run.",
+        "Shows the coach card with sample content for 20 seconds, so it can be dragged into place before a run.",
         "idle"
     ).withAction("Preview") { hudPreviewUntil = System.currentTimeMillis() + HUD_PREVIEW_MS; "showing" }
     val hazardPreviewInfo = InfoDisplayConfigItem(
@@ -196,6 +188,7 @@ class ZukHelper : Script(), ConfigurableScript {
     private var startHintUntil = 0L
 
     private var playerTile: Tile? = null
+    private val hud by live<ZukHudData?>(null, HUD_REFRESH_MS) { if (showHud.value) hudData() else null }
     private var lastAction: ZukAction? = null
     private var lastActionAt = 0L
 
@@ -544,25 +537,15 @@ class ZukHelper : Script(), ConfigurableScript {
             }
     }
 
-    override fun render() {
-        if (showHud.value) drawCoachHud()
-        drawWorldOverlay()
-    }
+    override fun render() = drawWorldOverlay()
 
-    /**
-     * A chromeless ImGui window, so dragging and resizing come from ImGui itself; the card is drawn
-     * against the window's live geometry on the render thread from an immutable snapshot. Text size
-     * is fixed (single-font binding), so resizing changes width and wrapping, not scale.
-     */
-    private fun drawCoachHud() {
-        val data = hudData() ?: return
-        val (screenW, _) = runCatching { NativeBridge.getDisplaySize() }.getOrDefault(0f to 0f)
-        if (screenW > 0f) {
-            setNextWindowPos(screenW * 0.5f - ZukHudRenderer.DEFAULT_WIDTH * 0.5f, PANEL_TOP, ImGuiCond.FirstUseEver)
-        }
-        setNextWindowSize(ZukHudRenderer.DEFAULT_WIDTH, ZukHudRenderer.DEFAULT_HEIGHT, ImGuiCond.FirstUseEver)
-        window("Zuk Coach##zuk-hud", HUD_WINDOW_FLAGS) {
-            windowDraw { drawList, x, y, width, _ -> ZukHudRenderer.draw(data, drawList, x, y, width) }
+    @Composable
+    override fun Panel() {
+        val data = hud
+        when {
+            !showHud.value -> Hint("Coach HUD is off in settings")
+            data == null -> Hint("Waiting for the encounter")
+            else -> ZukCoachCard(data)
         }
     }
 
@@ -575,9 +558,8 @@ class ZukHelper : Script(), ConfigurableScript {
     private fun sampleHudData(): ZukHudData = ZukHudData(
         prayerLabel = "PROTECT MAGIC",
         prayerAccent = CombatStyle.MAGIC.drawColor,
-        icon = prayerIcon(CombatStyle.MAGIC, onCurses = false, soulSplit = false),
         mode = "HARD MODE" to MODE_HARD,
-        instruction = "SAMPLE - DRAG & RESIZE ME" to ImGuiColors.withAlpha(TELEGRAPH_RGB.asDrawColor(), 245),
+        instruction = "SAMPLE - DRAG ME INTO PLACE" to ImGuiColors.withAlpha(TELEGRAPH_RGB.asDrawColor(), 245),
         abilities = "Barricade   ·   Freedom",
         sections = listOf(
             ZukHudData.Section(
@@ -585,7 +567,7 @@ class ZukHelper : Script(), ConfigurableScript {
                     "2× Ket-Zek" to CombatStyle.MAGIC.drawColor,
                     "4× Mej" to CombatStyle.MAGIC.drawColor,
                     "2× Tok-Xil" to CombatStyle.RANGED.drawColor,
-                    "1× Kih" to ZukHudRenderer.SECTION_TEXT
+                    "1× Kih" to ZukHudColors.SECTION_TEXT
                 )
             ),
             ZukHudData.Section("NEXT 13 - REGULAR", listOf("4× Ket-Zek" to CombatStyle.MAGIC.drawColor))
@@ -603,8 +585,7 @@ class ZukHelper : Script(), ConfigurableScript {
             ?: if (soulSplit) "SOUL SPLIT" else "NO PRAYER"
         return ZukHudData(
             prayerLabel = label,
-            prayerAccent = prayer?.drawColor ?: ZukHudRenderer.NEUTRAL_ACCENT,
-            icon = prayerIcon(prayer, onCurses, soulSplit),
+            prayerAccent = prayer?.drawColor ?: ZukHudColors.NEUTRAL_ACCENT,
             mode = modeBadge(),
             instruction = instruction,
             abilities = abilitySuggestions.takeIf { it.isNotEmpty() && instruction != null }?.joinToString("   ·   "),
@@ -658,7 +639,7 @@ class ZukHelper : Script(), ConfigurableScript {
     /** Mob names carry their combat-style colour, so the roster doubles as a threat preview. */
     private fun waveSection(title: String, wave: WaveInfo): ZukHudData.Section =
         ZukHudData.Section(title, wave.spawns.map { spawn ->
-            "${spawn.count}× ${shortName(spawn.minion)}" to (spawn.minion.style?.drawColor ?: ZukHudRenderer.SECTION_TEXT)
+            "${spawn.count}× ${shortName(spawn.minion)}" to (spawn.minion.style?.drawColor ?: ZukHudColors.SECTION_TEXT)
         })
 
     private fun shortName(minion: ZukMinion): String = minion.displayName.replace("TzekHaar-", "")
@@ -882,27 +863,6 @@ class ZukHelper : Script(), ConfigurableScript {
         val mechanic: String?
     )
 
-    /**
-     * The real prayer-book icon for the prayer the coach is calling: the combatv2 prayer/curse struct
-     * resolved by gameval name, then its lit-icon graphic (`prayer_graphic_on`) - never a hardcoded
-     * graphic id, so a build that renumbers graphics cannot serve the wrong icon. The rest state on the
-     * standard book has no prayer, so no icon. Single-frame graphics, safe for [graphicTexture].
-     */
-    private fun prayerIcon(style: CombatStyle?, onCurses: Boolean, soulSplit: Boolean): ImGuiTexture? {
-        val struct = when (style) {
-            CombatStyle.MELEE -> if (onCurses) "combatv2_curse_deflect_melee" else "combatv2_prayer_protect_melee"
-            CombatStyle.RANGED -> if (onCurses) "combatv2_curse_deflect_missiles" else "combatv2_prayer_protect_missiles"
-            CombatStyle.MAGIC -> if (onCurses) "combatv2_curse_deflect_magic" else "combatv2_prayer_protect_magic"
-            null -> if (soulSplit) "combatv2_curse_soulsplit" else return null
-        }
-        return prayerIconCache.getOrPut(struct) {
-            runCatching {
-                val graphic = Cache.struct(Gameval.requireId(STRUCT, struct))?.getIntValue(Gameval.requireId(PARAM, "prayer_graphic_on")) ?: 0
-                graphic.takeIf { it > 0 }?.let { graphicTexture(it) }
-            }.getOrNull()
-        }
-    }
-
     private fun Int.asDrawColor(): Int =
         ImGuiColors.rgba((this ushr 16) and 0xFF, (this ushr 8) and 0xFF, this and 0xFF)
 
@@ -931,12 +891,7 @@ class ZukHelper : Script(), ConfigurableScript {
         const val HUD_PREVIEW_MS = 20_000L
         const val WALL_COOLDOWN_MS = 45_000L
 
-        const val PANEL_TOP = 60f
-
-        val HUD_WINDOW_FLAGS = WindowFlags.NoTitleBar + WindowFlags.NoBackground + WindowFlags.NoScrollbar +
-            WindowFlags.NoScrollWithMouse + WindowFlags.NoCollapse + WindowFlags.NoFocusOnAppearing
-
-        val prayerIconCache = HashMap<String, ImGuiTexture?>()
+        const val HUD_REFRESH_MS = 100L
 
         /** Muted for practice, bronze for normal, hot for hard - a badge, not roster text. */
         val MODE_PRACTICE = ImGuiColors.rgba(120, 110, 92, 235)

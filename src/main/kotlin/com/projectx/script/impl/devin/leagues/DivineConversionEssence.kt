@@ -1,27 +1,29 @@
 package com.projectx.script.impl.devin.leagues
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import com.projectx.game.interfaces.IFSlot
 import com.projectx.game.interfaces.actionbarSlots
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.IntConfigItem
 import com.projectx.script.Script
 import com.projectx.script.ScriptCategory
 import com.projectx.script.ScriptDescription
+import com.projectx.script.api.SkillTracker
+import com.projectx.script.api.SkillTrackerReadout
+import com.projectx.script.api.SkillTrackerSnapshot
 import com.projectx.script.api.findClosestObject
-import com.projectx.script.api.getXp
 import com.projectx.script.api.inventory
 import com.projectx.script.api.varps
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
+import com.projectx.ui.compose.components.Hint
 import com.projectx.util.componentIdFromHash
-import com.projectx.util.formatElapsedTime
 import com.projectx.util.gaussian
-import com.projectx.util.getFormattedXpPerHour
-import com.projectx.util.getUnitsPerHour
 import com.projectx.util.interfaceIdFromHash
 import org.projectx.core.game.combat.ActionBarModel
 import org.projectx.core.game.skill.Skill
@@ -32,12 +34,12 @@ private const val ALTAR_RANGE = 12
 
 @ScriptDescription(
     name = "Divine Conversion Essence",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Devin",
     description = "Alchemises a rune stack into pure essence, then crafts it at the nearest runecrafting altar.",
     category = ScriptCategory.RUNECRAFTING
 )
-class DivineConversionEssence : Script(), ConfigurableScript {
+class DivineConversionEssence : Script(), ConfigurableScript, ComposePanel {
 
     private val runeId = IntConfigItem(
         name = "Rune id",
@@ -54,16 +56,9 @@ class DivineConversionEssence : Script(), ConfigurableScript {
         max = 28
     )
 
-    private var startTime = 0L
-    private var startingXp = 0
-    private var essenceMade = 0
-    private var crafts = 0
-    private var lastReport = ""
-
-    override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.RUNECRAFTING)
-    }
+    private val tracker = SkillTracker(Skill.RUNECRAFTING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private var lastReport by mutableStateOf("")
 
     override suspend fun loop() {
         if (inventory.freeSlots >= castYield.value && inventory.count(runeId.value) >= castYield.value)
@@ -80,7 +75,7 @@ class DivineConversionEssence : Script(), ConfigurableScript {
         delayUntil(gaussian(2400L, 700L), pollingDelayMillis = 40) { inventory.count(PURE_ESSENCE) > before }
         val gained = inventory.count(PURE_ESSENCE) - before
         if (gained <= 0) return idle("Cast produced no essence - is Low Level Alchemy on the bar and the rune alchable?")
-        essenceMade += gained
+        tracker.add("Essence", gained)
         lastReport = ""
         delay(88, 52)
     }
@@ -92,7 +87,7 @@ class DivineConversionEssence : Script(), ConfigurableScript {
         val option = if (altar.hasOption("Use")) "Use" else "Craft runes"
         if (!altar.interact(option)) return idle("${altar.name()} would not accept \"$option\"")
         delayUntil(gaussian(4800L, 1400L), pollingDelayMillis = 40) { inventory.count(PURE_ESSENCE) <= 0 }
-        crafts++
+        tracker.add("Crafts")
         lastReport = ""
         delay(180, 90)
     }
@@ -123,14 +118,11 @@ class DivineConversionEssence : Script(), ConfigurableScript {
         return IFSlot(interfaceIdFromHash(hash), componentIdFromHash(hash))
     }
 
-    override fun render() {
-        ImGuiDsl.window("Divine Conversion Essence") {
-            image(graphicTexture(GraphicIds.RUNECRAFTING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("Essence/hr: ${getUnitsPerHour(essenceMade, startTime)}")
-            text("Crafts/hr: ${getUnitsPerHour(crafts, startTime)}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.RUNECRAFTING), startTime)}")
-            xpProgressBar(Skill.RUNECRAFTING)
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SkillTrackerReadout(progress)
+            if (lastReport.isNotEmpty()) Hint(lastReport)
         }
     }
 }

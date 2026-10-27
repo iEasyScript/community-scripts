@@ -1,25 +1,27 @@
 package com.projectx.script.impl.trent
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.game.math.WorldToScreen
 import com.projectx.game.nxt.entity.GroundItem
 import com.projectx.game.nxt.entity.location.SceneObject
+import com.projectx.script.ComposePanel
 import com.projectx.script.Script
 import com.projectx.script.ScriptDescription
 import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
 import com.projectx.ui.backend.dsl.ImGuiDsl.backgroundDrawList
-import com.projectx.ui.backend.dsl.ImGuiDsl.window
-import com.projectx.ui.backend.dsl.scopes.separator
-import com.projectx.ui.backend.dsl.scopes.spacing
-import com.projectx.ui.backend.dsl.scopes.text
 import com.projectx.ui.backend.dsl.utils.ImGuiColors
-import com.projectx.util.format
+import com.projectx.ui.compose.components.Hint
+import com.projectx.ui.compose.components.Readout
+import com.projectx.ui.compose.theme.Palette
 import com.projectx.util.formatElapsedTime
-import com.projectx.util.getFormattedUnitsPerHour
-import com.projectx.util.getFormattedXpPerHour
 import com.projectx.util.random
 import java.util.concurrent.ConcurrentHashMap
 
@@ -47,6 +49,8 @@ private enum class TrapState(val label: String, val color: Int) {
 
 private data class GroundItemKey(val id: Int, val tile: Tile)
 
+private data class HunterHud(val trap: String = "none detected", val level: Int = 0, val clearingFloor: Boolean = false)
+
 private val trapItemNames = TrapKind.entries.mapTo(mutableSetOf()) { it.trapItem }
 
 private val crossOffsets = listOf(
@@ -59,20 +63,18 @@ private val crossOffsets = listOf(
 
 @ScriptDescription(
     name = "Chinchompa Hunter",
-    version = "1.2.0",
+    version = "1.3.0",
     author = "Trent",
     description = "Replaces hunter traps and catches what is in them."
 )
-class ChinchompaHunting : Script() {
+class ChinchompaHunting : Script(), ComposePanel {
     var startTile: Tile = Tile.EMPTY
 
     private val groundItemFirstSeen = ConcurrentHashMap<GroundItemKey, Long>()
     private val trapStates = ConcurrentHashMap<Tile, TrapState>()
     private val trapStateSince = ConcurrentHashMap<Tile, Long>()
-    private val resourcesGained = ConcurrentHashMap<String, Int>()
 
     private var lastInventoryCounts: Map<String, Int>? = null
-    private var startXp = 0
     private var startTime = 0L
 
     @Volatile
@@ -81,14 +83,18 @@ class ChinchompaHunting : Script() {
     @Volatile
     private var clearingFloor = false
 
+    private val tracker = SkillTracker(Skill.HUNTER)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val hud by live(HunterHud()) {
+        HunterHud(currentKind?.trapItem ?: "none detected", getCurrentLevel(Skill.HUNTER), clearingFloor)
+    }
+
     override fun onStart() {
         startTile = localPlayer.tile
-        startXp = getXp(Skill.HUNTER)
         startTime = System.currentTimeMillis()
         groundItemFirstSeen.clear()
         trapStates.clear()
         trapStateSince.clear()
-        resourcesGained.clear()
         lastInventoryCounts = null
         clearingFloor = false
     }
@@ -243,7 +249,7 @@ class ChinchompaHunting : Script() {
         lastInventoryCounts?.let { previous ->
             counts.forEach { (name, amount) ->
                 val gained = amount - (previous[name] ?: 0)
-                if (gained > 0) resourcesGained.merge(name, gained, Int::plus)
+                if (gained > 0) tracker.add(name, gained)
             }
         }
         lastInventoryCounts = counts
@@ -264,31 +270,20 @@ class ChinchompaHunting : Script() {
         else -> 5
     }
 
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Readout(listOf("Trap" to hud.trap, "Hunter level" to hud.level.toString()))
+            if (hud.clearingFloor) Hint("Clearing floor - too many traps", color = Palette.amber)
+            SkillTrackerReadout(progress)
+            if (progress.started && progress.counts.isEmpty()) Hint("No resources yet")
+        }
+    }
+
     override fun render() {
         if (startTime == 0L) return
-        val kind = currentKind
+        val kind = currentKind ?: return
         val now = System.currentTimeMillis()
-
-        window("Chinchompa Hunter") {
-            text("Trap: ${kind?.trapItem ?: "none detected"}")
-            text("Hunter level: ${getCurrentLevel(Skill.HUNTER)}")
-            text("Runtime: ${formatElapsedTime(now, startTime)}")
-            separator()
-            text("XP gained: ${format(getXp(Skill.HUNTER) - startXp)}")
-            text("XP/hr: ${getFormattedXpPerHour(startXp, getXp(Skill.HUNTER), startTime)}")
-            spacing()
-            text("Resources:")
-            if (resourcesGained.isEmpty()) text("  none yet")
-            resourcesGained.entries.sortedByDescending { it.value }.forEach { (name, count) ->
-                text("  $name: ${format(count)} (${getFormattedUnitsPerHour(count, startTime)}/hr)")
-            }
-            if (clearingFloor) {
-                spacing()
-                text("Clearing floor - too many traps")
-            }
-        }
-
-        if (kind == null) return
         backgroundDrawList {
             val plane = localPlayer.graphNode.tileFine.z
             val tiles = trapTiles()

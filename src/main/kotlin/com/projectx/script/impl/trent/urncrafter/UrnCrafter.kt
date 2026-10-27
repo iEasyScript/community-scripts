@@ -1,16 +1,26 @@
 package com.projectx.script.impl.trent.urncrafter
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.script.BooleanConfigItem
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.Script
 import com.projectx.script.ScriptCategory
 import com.projectx.script.ScriptDescription
 import com.projectx.script.StringConfigItem
 import com.projectx.script.api.MakeX
+import com.projectx.script.api.SkillTracker
+import com.projectx.script.api.SkillTrackerReadout
+import com.projectx.script.api.SkillTrackerSnapshot
 import com.projectx.script.api.findClosestObject
-import com.projectx.script.api.getXp
 import com.projectx.script.api.interactClosestObject
 import com.projectx.script.api.inventory
 import com.projectx.script.api.localPlayer
@@ -18,16 +28,8 @@ import com.projectx.script.api.makeX
 import com.projectx.script.api.makeXConfirm
 import com.projectx.script.api.makeXReaction
 import com.projectx.script.api.walkTo
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
-import com.projectx.util.formatElapsedTime
+import com.projectx.ui.compose.components.Readout
 import com.projectx.util.gaussian
-import com.projectx.util.getFormattedXpPerHour
-import com.projectx.util.getUnitsPerHour
 
 private const val MINE = 66876
 private const val CLAY_ROCK = 113032
@@ -54,26 +56,25 @@ enum class Phase(val label: String) {
 
 @ScriptDescription(
     name = "Urn Crafter",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Trent",
     description = "Mines clay, softens it, forms urns, fires them and adds runes. Auto-detects the target urn from your inventory.",
     category = ScriptCategory.CRAFTING
 )
-class UrnCrafter : Script() {
-    private var startTime = 0L
-    private var startingXp = 0
-    private var family: String? = null
+class UrnCrafter : Script(), ComposePanel {
+    private var family by mutableStateOf<String?>(null)
     private var lastEmptyCount = -1
-    var urnsCrafted = 0
+    var urnsCrafted by mutableStateOf(0)
         private set
-    var phase = Phase.IDLE
+    var phase by mutableStateOf(Phase.IDLE)
         private set
-    var statusText = "Starting..."
+    var statusText by mutableStateOf("Starting...")
         private set
 
+    private val tracker = SkillTracker(Skill.CRAFTING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+
     override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.CRAFTING)
         family = detectUrnFamily()
     }
 
@@ -207,7 +208,10 @@ class UrnCrafter : Script() {
 
     private fun countFinished(fam: String) {
         val now = inventory.count(emptyRegex(fam))
-        if (now > lastEmptyCount) urnsCrafted += now - lastEmptyCount
+        if (now > lastEmptyCount) {
+            urnsCrafted += now - lastEmptyCount
+            tracker.add("Urns", now - lastEmptyCount)
+        }
         lastEmptyCount = now
     }
 
@@ -221,17 +225,16 @@ class UrnCrafter : Script() {
         delay(420, 240)
     }
 
-    override fun render() {
-        ImGuiDsl.window("Urn Crafter") {
-            image(graphicTexture(GraphicIds.CRAFTING), 32f, 32f)
-            text("Urn: ${family ?: "detecting..."}")
-            text("Phase: ${phase.label}")
-            text("Status: $statusText")
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.CRAFTING), startTime)}")
-            text("Urns/hr: ${getUnitsPerHour(urnsCrafted, startTime)}")
-            text("Urns made: $urnsCrafted")
-            xpProgressBar(Skill.CRAFTING)
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Readout(listOf(
+                "Urn" to (family ?: "detecting..."),
+                "Phase" to phase.label,
+                "Status" to statusText,
+                "Urns made" to urnsCrafted.toString(),
+            ))
+            SkillTrackerReadout(progress)
         }
     }
 }

@@ -1,10 +1,24 @@
 package com.projectx.script.impl.devin.aiobozocombat
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.projectx.game.bootstrap.Bootstrap
 import com.projectx.game.interfaces.IFSlot
 import com.projectx.game.interfaces.parseAllActionBarAbilities
 import com.projectx.game.interfaces.parseAllActionBarItems
 import com.projectx.script.BooleanConfigItem
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigSection
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.IntConfigItem
@@ -18,43 +32,22 @@ import com.projectx.script.api.combatTarget
 import com.projectx.script.api.inCombat
 import com.projectx.script.api.varcs
 import com.projectx.script.api.varps
-import com.projectx.ui.backend.dsl.ImGuiDsl.window
-import com.projectx.ui.backend.dsl.commands.BeginTableCommand
-import com.projectx.ui.backend.dsl.commands.EndTableCommand
-import com.projectx.ui.backend.dsl.scopes.LayoutScope
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.popStyleColor
-import com.projectx.ui.backend.dsl.scopes.progressBar
-import com.projectx.ui.backend.dsl.scopes.pushStyleColor
-import com.projectx.ui.backend.dsl.scopes.popStyleVar
-import com.projectx.ui.backend.dsl.scopes.pushStyleVar
-import com.projectx.ui.backend.dsl.scopes.separator
-import com.projectx.ui.backend.dsl.scopes.setCursorPosX
-import com.projectx.ui.backend.dsl.scopes.tableHeadersRow
-import com.projectx.ui.backend.dsl.scopes.tableNextColumn
-import com.projectx.ui.backend.dsl.scopes.tableNextRow
-import com.projectx.ui.backend.dsl.scopes.tableSetupColumn
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.script.impl.devin.aiobozocombat.QueueRenderer.drawQueue
 import com.projectx.script.impl.devin.aiobozocombat.rotations.MeleeIds
 import com.projectx.script.impl.devin.aiobozocombat.rotations.RotationCatalog
 import com.projectx.script.impl.devin.aiobozocombat.rotations.RotationEntry
-import com.projectx.ui.backend.dsl.utils.ImGuiCol
-import com.projectx.ui.backend.flags.WindowFlags
-import com.projectx.ui.backend.dsl.utils.ImGuiColors.hex
-import com.projectx.ui.backend.dsl.utils.ImGuiStyleVar
-import com.projectx.ui.backend.native.ImGuiTexture
-import com.projectx.ui.backend.native.graphicTexture
+import com.projectx.ui.compose.components.DataTable
+import com.projectx.ui.compose.components.Hint
+import com.projectx.ui.compose.components.TableColumn
+import com.projectx.ui.compose.theme.LocalType
 import org.projectx.core.game.combat.AbilityType
 import org.projectx.core.game.combat.CombatIds
 import world.gregs.voidps.cache.Cache
 import world.gregs.voidps.gameval.Gameval
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.ceil
 
 @ScriptDescription(
     name = "AIO Bozo Combat",
-    version = "0.2.0",
+    version = "0.3.0",
     author = "Devin",
     description = "Rotation coach for EOC 2.0. Shows a tick metronome and a queue of what you just " +
         "pressed, what to press next and when, and what is coming after - abilities, prayers and " +
@@ -64,7 +57,7 @@ import kotlin.math.ceil
     visible = false,
     category = ScriptCategory.COMBAT
 )
-class AIOBozoCombat : Script(), ConfigurableScript {
+class AIOBozoCombat : Script(), ConfigurableScript, ComposePanel {
 
     val rotationSection = ConfigSection("Rotation")
     val rotationChoice = OptionsConfigItem(
@@ -103,8 +96,8 @@ class AIOBozoCombat : Script(), ConfigurableScript {
 
     private val feed = ActionFeed()
 
-    @Volatile
-    private var snapshot: Snapshot? = null
+    private var snapshot by mutableStateOf<Snapshot?>(null)
+    private val cycle by live(0, 0) { runCatching { Bootstrap.client.clientCycle }.getOrDefault(0) }
 
     private var slowTickCounter = 0
     private var bar: Map<AbilityType, Int> = emptyMap()
@@ -136,7 +129,6 @@ class AIOBozoCombat : Script(), ConfigurableScript {
     private var expectedChannelEndTick = Int.MIN_VALUE
     private var seededChannelCast = -1
     private val stabiliser = QueueStabiliser()
-    private val textures = HashMap<Int, ImGuiTexture?>()
 
     override fun onStart() {
         feed.clear()
@@ -642,111 +634,25 @@ class AIOBozoCombat : Script(), ConfigurableScript {
         }
     }
 
-    private fun LayoutScope.metronome(cycle: Int, railWidth: Float, showTick: Boolean) {
-        val phase = cycle % CombatIds.CYCLES_PER_TICK
-        val barWidth = railWidth.coerceAtLeast(METRONOME_MIN_WIDTH)
-        pushStyleColor(ImGuiCol.PlotHistogram, METRONOME_FILL)
-        pushStyleColor(ImGuiCol.FrameBg, METRONOME_TRACK)
-        pushStyleVar(ImGuiStyleVar.FrameRounding, METRONOME_ROUNDING)
-        progressBar(phase.toFloat() / CombatIds.CYCLES_PER_TICK, barWidth, METRONOME_HEIGHT, BLANK_OVERLAY)
-        popStyleVar(1)
-        popStyleColor(2)
-
-        if (!showTick) return
-        val label = "${cycle / CombatIds.CYCLES_PER_TICK}"
-        setCursorPosX(((railWidth - QueueRenderer.textWidth(label)) / 2f).coerceAtLeast(0f))
-        pushStyleColor(ImGuiCol.Text, TICK_TEXT)
-        text(label)
-        popStyleColor(1)
-    }
-
-    /**
-     * The snapshot refreshes far slower than the frame rate, which makes the metronome step in
-     * visible jumps, so the cycle counter is read live here and falls back to the snapshot.
-     */
-    private fun liveCycle(fallback: Int): Int =
-        runCatching { Bootstrap.client.clientCycle }.getOrDefault(fallback)
-
-    /** Textures are GL objects, so they are only ever created here on the render thread. */
-    private fun textureFor(graphic: Int): ImGuiTexture? {
-        if (graphic <= 0) return null
-        if (textures.containsKey(graphic)) return textures[graphic]
-        val texture = runCatching { graphicTexture(graphic) }.getOrNull()
-        textures[graphic] = texture
-        return texture
-    }
-
-    override fun render() {
-        val state = snapshot ?: return
-        window("AIO Bozo Combat##aiobozo-harness", HUD_FLAGS) {
-            pushStyleVar(ImGuiStyleVar.ItemSpacing, ITEM_GAP, ITEM_GAP)
-            pushStyleVar(ImGuiStyleVar.CellPadding, CELL_PAD, CELL_PAD)
-            pushStyleVar(ImGuiStyleVar.FramePadding, FRAME_PAD, FRAME_PAD)
-            val cycle = liveCycle(state.cycle)
-            val railWidth = QueueRenderer.railWidthFor(state.queue.used.size, state.queue.upcoming.size)
-            if (showClock.value) metronome(cycle, railWidth, showDiagnostics.value)
-            if (showQueue.value) {
-                val phase = cycle % CombatIds.CYCLES_PER_TICK
-                drawQueue(state.queue, phase.toFloat() / CombatIds.CYCLES_PER_TICK) { textureFor(it) }
-            }
-
-            if (showBar.value) {
-                separator()
-                text("ABILITIES ON YOUR ACTION BARS - cache values vs live state (${state.abilities.size})")
-                val diagnostics = showDiagnostics.value
-                val columns = buildList {
-                    addAll(listOf("icon", "ability", "key", "tier", "adren", "ready in", "base cd", "buff"))
-                    if (diagnostics) addAll(listOf("bar/slot", "varc"))
-                }
-                imageTable("bar##aiobozo", columns) {
-                    for (row in state.abilities) {
-                        tableNextRow()
-                        tableNextColumn()
-                        val texture = if (row.iconGraphic > 0) textureFor(row.iconGraphic) else null
-                        if (texture != null) image(texture, ICON_SIZE, ICON_SIZE) else text("-")
-                        tableNextColumn(); text(row.name + if (row.empowerable) " *" else "")
-                        tableNextColumn(); text(row.keybind ?: "-")
-                        tableNextColumn(); text(row.tierName)
-                        tableNextColumn(); text(row.adrenLabel())
-                        tableNextColumn(); text(row.readyInLabel(state.cooldowns[row.structId] ?: 0.0))
-                        tableNextColumn(); text(row.baseCooldownLabel())
-                        tableNextColumn(); text(row.buffLabel())
-                        if (diagnostics) {
-                            tableNextColumn(); text("${row.barLoc}.${row.slot}")
-                            tableNextColumn(); text(row.varcStatus)
-                        }
-                    }
-                }
-                if (diagnostics) text(VARC_LEGEND)
-            }
-
-            if (showItems.value) {
-                separator()
-                text("ITEMS ON YOUR ACTION BARS - food, potions, bombs (${state.items.size})")
-                imageTable("items##aiobozo", listOf("item", "id", "bar/slot", "key")) {
-                    for (row in state.items) {
-                        tableNextRow()
-                        tableNextColumn(); text(row.name)
-                        tableNextColumn(); text(row.itemId.toString())
-                        tableNextColumn(); text(row.location)
-                        tableNextColumn(); text(row.keybind ?: "-")
-                    }
+    @Composable
+    override fun Panel() {
+        val state = snapshot ?: return Hint("Waiting for combat data")
+        val now = { if (cycle > 0) cycle else state.cycle }
+        val phase = { (now() % CombatIds.CYCLES_PER_TICK).toFloat() / CombatIds.CYCLES_PER_TICK }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (showClock.value || showQueue.value) {
+                Column(
+                    Modifier.width(IntrinsicSize.Max).widthIn(min = 120.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (showClock.value) Metronome(phase, if (showDiagnostics.value) ({ now() / CombatIds.CYCLES_PER_TICK }) else null)
+                    if (showQueue.value) QueueRail(state.queue, phase)
                 }
             }
-
-            if (showFeed.value) {
-                separator()
-                text("WHAT ACTUALLY FIRED - newest first, any source including revolution")
-                imageTable("feed##aiobozo", listOf("tick", "event", "detail")) {
-                    for (event in state.events.asReversed().take(MAX_FEED_ROWS)) {
-                        tableNextRow()
-                        tableNextColumn(); text(event.tick.toString())
-                        tableNextColumn(); text(event.label)
-                        tableNextColumn(); text(event.detail)
-                    }
-                }
-            }
-            popStyleVar(3)
+            if (showBar.value) AbilityTable(state, showDiagnostics.value)
+            if (showItems.value) ItemTable(state.items)
+            if (showFeed.value) FeedTable(state.events)
         }
     }
 }
@@ -868,17 +774,72 @@ private fun AbilityType.toRow(keybind: String?, barLoc: Int, slot: Int, liveGrap
     )
 }
 
-/**
- * A table that can hold images. The DSL's own `table` builds a [TableScope], which has no image
- * support and does not extend [LayoutScope], so the begin/end commands are emitted directly instead.
- */
-private inline fun LayoutScope.imageTable(id: String, columns: List<String>, body: () -> Unit) {
-    commands.add(BeginTableCommand(id, columns.size, TABLE_FLAGS, AtomicReference(false)))
-    for (column in columns) tableSetupColumn(column)
-    tableHeadersRow()
-    body()
-    commands.add(EndTableCommand())
+@Composable
+private fun AbilityTable(state: Snapshot, diagnostics: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BasicText(
+            "ABILITIES ON YOUR ACTION BARS - cache values vs live state (${state.abilities.size})",
+            style = LocalType.current.eyebrow,
+        )
+        DataTable(if (diagnostics) ABILITY_COLUMNS + DIAGNOSTIC_COLUMNS else ABILITY_COLUMNS, state.abilities) { row ->
+            text(row.name + if (row.empowerable) " *" else "")
+            text(row.keybind ?: "-")
+            text(row.tierName)
+            text(row.adrenLabel())
+            text(row.readyInLabel(state.cooldowns[row.structId] ?: 0.0))
+            text(row.baseCooldownLabel())
+            text(row.buffLabel())
+            if (diagnostics) {
+                text("${row.barLoc}.${row.slot}")
+                text(row.varcStatus)
+            }
+        }
+        if (diagnostics) Hint(VARC_LEGEND)
+    }
 }
+
+@Composable
+private fun ItemTable(items: List<ItemRow>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BasicText("ITEMS ON YOUR ACTION BARS - food, potions, bombs (${items.size})", style = LocalType.current.eyebrow)
+        DataTable(ITEM_COLUMNS, items) { row ->
+            text(row.name)
+            text(row.itemId.toString())
+            text(row.location)
+            text(row.keybind ?: "-")
+        }
+    }
+}
+
+@Composable
+private fun FeedTable(events: List<FeedEvent>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BasicText("WHAT ACTUALLY FIRED - newest first, any source including revolution", style = LocalType.current.eyebrow)
+        DataTable(FEED_COLUMNS, events.asReversed().take(MAX_FEED_ROWS)) { event ->
+            text(event.tick.toString())
+            text(event.label)
+            text(event.detail)
+        }
+    }
+}
+
+private val ABILITY_COLUMNS = listOf(
+    TableColumn("ability", 1.6f),
+    TableColumn("key", 0.5f, mono = true),
+    TableColumn("tier"),
+    TableColumn("adren", 0.7f, mono = true),
+    TableColumn("ready in", mono = true),
+    TableColumn("base cd", mono = true),
+    TableColumn("buff", mono = true),
+)
+private val DIAGNOSTIC_COLUMNS = listOf(TableColumn("bar/slot", 0.7f, mono = true), TableColumn("varc", 0.8f))
+private val ITEM_COLUMNS = listOf(
+    TableColumn("item", 1.6f),
+    TableColumn("id", 0.7f, mono = true),
+    TableColumn("bar/slot", 1.2f),
+    TableColumn("key", 0.5f, mono = true),
+)
+private val FEED_COLUMNS = listOf(TableColumn("tick", 0.6f, mono = true), TableColumn("event", 1.4f), TableColumn("detail", 1.6f))
 
 /** A prayer step asks for a state, so the tile has to say which one rather than just naming it. */
 private fun prayerLabel(name: String, active: Boolean): String = if (active) name else "$name off"
@@ -907,27 +868,10 @@ private fun AbilityType.cacheParam(name: String): Int =
 private const val CHANNEL_ITERATIONS = "combatv2_ability_channel_iterations"
 private const val CHANNEL_RATE = "combatv2_ability_channel_rate"
 private const val ADRENALINE_UNITS_PER_PERCENT = 10.0
-private const val ITEM_GAP = 4f
-private const val CELL_PAD = 3f
-private const val FRAME_PAD = 3f
-private const val METRONOME_ROUNDING = 3f
-private val TICK_TEXT = hex("#6E6152")
-private val HUD_FLAGS = WindowFlags.NoTitleBar + WindowFlags.NoScrollbar +
-    WindowFlags.NoScrollWithMouse + WindowFlags.NoCollapse + WindowFlags.NoFocusOnAppearing +
-    WindowFlags.AlwaysAutoResize
-private const val METRONOME_MIN_WIDTH = 120f
-private const val METRONOME_HEIGHT = 6f
-
-/** ImGui draws its default "XX%" when the overlay is null, and an empty string reaches it as null. */
-private const val BLANK_OVERLAY = " "
-private val METRONOME_FILL = hex("#C9A227")
-private val METRONOME_TRACK = hex("#241E19")
 private const val SECONDS_PER_TICK = 0.6
 private const val VARC_LEGEND =
     "varc: ok = derived cooldown varc matches :core's table · NEW = derived one :core is missing · " +
         "none = ability has no cooldown varc · CONFLICT = derivation disagrees, treat as a bug"
-private const val ICON_SIZE = 26f
-private const val TABLE_FLAGS = 1 or 64 or 1920
 private const val MAX_FEED_ROWS = 25
 private const val MAX_QUEUE_SIDE = 6
 private const val CONFIDENCE_DECAY = 0.22f

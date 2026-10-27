@@ -1,18 +1,25 @@
 package com.projectx.script.impl.bp.hunter.box
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.game.math.WorldToScreen
+import com.projectx.script.ComposePanel
 import com.projectx.script.Script
 import com.projectx.script.ScriptDescription
 import com.projectx.script.ScriptCategory
 import com.projectx.script.api.*
 import com.projectx.ui.backend.dsl.ImGuiDsl.backgroundDrawList
-import com.projectx.ui.backend.dsl.ImGuiDsl.window
-import com.projectx.ui.backend.dsl.scopes.separator
-import com.projectx.ui.backend.dsl.scopes.spacing
-import com.projectx.ui.backend.dsl.scopes.text
 import com.projectx.ui.backend.dsl.utils.ImGuiColors
+import com.projectx.ui.compose.components.Readout
+import com.projectx.ui.compose.components.Stat
 
 private enum class TrapState(val itemName: String, val actionName: String?, val objectIds: Set<Int>, val drawColor: Int) {
     WAITING("Box trap", null, setOf(19187), ImGuiColors.YELLOW),
@@ -43,12 +50,12 @@ private val crossOffsets = listOf(
 
 @ScriptDescription(
     name = "Box Trapping",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "BP",
     description = "Automated box trapping script for hunter training.",
     category = ScriptCategory.HUNTER
 )
-class BoxTrapping : Script() {
+class BoxTrapping : Script(), ComposePanel {
     private var startTile: Tile = Tile.EMPTY
     private val trapTiles: Set<Tile>
         get() {
@@ -60,8 +67,10 @@ class BoxTrapping : Script() {
             }.toSet()
         }
 
-    private var trapsPlaced = 0
-    private var animalsCaught = 0
+    private var trapsPlaced by mutableStateOf(0)
+    private var animalsCaught by mutableStateOf(0)
+    private val hunterLevel by live(0) { getCurrentLevel(Skill.HUNTER) }
+    private val activeTiles by live(0) { trapTiles.size }
     private val trapStateHistory = mutableMapOf<Tile, Pair<TrapState, Long>>()
 
     private val tileStates: Map<Tile, TrapState>
@@ -181,17 +190,18 @@ class BoxTrapping : Script() {
         else -> 5
     }
 
-    override fun render() {
-        window("Box Trapping Stats") {
-            text("Script: Box Trapping")
-            separator()
-            text("Hunter Level: ${getCurrentLevel(Skill.HUNTER)}")
-            text("Active Tiles: ${trapTiles.size}")
-            spacing()
-            text("Statistics:")
-            text("Traps Placed: $trapsPlaced")
-            text("Animals Caught: $animalsCaught")
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Stat("Hunter level", "$hunterLevel")
+                Stat("Active tiles", "$activeTiles")
+            }
+            Readout(listOf("Traps placed" to "$trapsPlaced", "Animals caught" to "$animalsCaught"))
         }
+    }
+
+    override fun render() {
         backgroundDrawList {
             trapTiles.forEach { tile ->
                 val state = getTrapState(tile)
@@ -199,8 +209,7 @@ class BoxTrapping : Script() {
                 if (screenPos != null) {
                     val timeSinceChange = getTimeSinceStateChange(tile)
                     val timeText = formatTime(timeSinceChange)
-                    
-                    // Draw time above state text (assuming 10px font height)
+
                     text(screenPos.transform(0f, -12f), ImGuiColors.WHITE, timeText)
                     text(screenPos, state.drawColor, state.name)
                 }

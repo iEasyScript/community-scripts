@@ -17,8 +17,6 @@ import kotlin.math.sin
 const val CHAR_WIDTH = 7f
 const val LINE_HEIGHT = 16f
 
-private const val PANEL_GAP = 8f
-private const val PANEL_PADDING = 8f
 private const val EDGE_MARGIN = 90f
 private const val ARROW_LENGTH = 34f
 
@@ -138,30 +136,4 @@ fun BackgroundDrawListScope.edgeBearing(from: Tile, to: Tile, color: Int, captio
         headSize = 18f,
     )
     label(Vector2f(tipX - stepX * (ARROW_LENGTH + 14f), tipY - stepY * (ARROW_LENGTH + 14f) - LINE_HEIGHT / 2f), caption, color)
-}
-
-/**
- * A read-out panel pinned beside [anchor] - to its right when the display has room, otherwise to its
- * left, otherwise overlapping its left edge. Panels are stacked by [slot] so two active modules do not
- * draw over each other.
- */
-fun BackgroundDrawListScope.panel(anchor: ScreenRect, lines: List<String>, accent: Int, slot: Int = 0) {
-    if (lines.isEmpty()) return
-    val width = lines.maxOf { it.length } * CHAR_WIDTH + PANEL_PADDING * 2
-    val height = lines.size * LINE_HEIGHT + PANEL_PADDING * 2
-    val (displayWidth, displayHeight) = ImGuiDsl.getDisplaySize()
-    val right = anchor.x + anchor.width + PANEL_GAP
-    val x = when {
-        right + width <= displayWidth -> right
-        anchor.x - PANEL_GAP - width >= 0f -> anchor.x - PANEL_GAP - width
-        else -> anchor.x.toFloat()
-    }
-    val y = (anchor.y + slot * (height + PANEL_GAP)).coerceIn(0f, maxOf(0f, displayHeight - height))
-
-    rectFilled(Vector2f(x, y), Vector2f(x + width, y + height), ImGuiColors.OVERLAY_DARK, rounding = 4f)
-    rect(Vector2f(x, y), Vector2f(x + width, y + height), accent, rounding = 4f, thickness = 1.5f)
-    lines.forEachIndexed { index, line ->
-        val color = if (index == 0) ImGuiColors.WHITE else accent
-        text(Vector2f(x + PANEL_PADDING, y + PANEL_PADDING + index * LINE_HEIGHT), color or (255 shl 24), line)
-    }
 }

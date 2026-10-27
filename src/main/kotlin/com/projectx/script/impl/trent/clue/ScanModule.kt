@@ -140,8 +140,15 @@ class ScanModule : ClueModule {
                     textOnTile(spot, color, "${paces(here, spot)}", heightFine = height)
                 }
             }
-            anchor()?.let { panel(it, lines(here, answer), accent(answer)) }
         }
+    }
+
+    override fun readout(): ClueReadout? {
+        anchor() ?: return null
+        val here = runCatching { localPlayer.tile }.getOrNull() ?: return null
+        val answer = pinned
+        return if (answer != null) ClueReadout(name, "Found", ClueTone.DONE, lines(here, answer))
+        else ClueReadout(name, "Searching", ClueTone.WORKING, lines(here, null))
     }
 
     /** Deliberately loud: this is the tile the game itself is pointing at. */
@@ -166,7 +173,6 @@ class ScanModule : ClueModule {
     private fun anchor() = rectOf(SCAN_INTERFACE, SCAN_DATA) ?: rectOf(SCAN_INTERFACE, FOUND_TEXT)
 
     private fun lines(here: Tile, answer: Tile?) = buildList {
-        add(name)
         if (readout.isNotEmpty()) add(readout)
         when {
             answer != null -> {
@@ -180,9 +186,6 @@ class ScanModule : ClueModule {
             }
         }
     }
-
-    private fun accent(answer: Tile?) =
-        (if (answer != null) ImGuiColors.GREEN else ImGuiColors.CYAN) or (255 shl 24)
 
     private fun paces(from: Tile, to: Tile) = maxOf(abs(from.x - to.x), abs(from.y - to.y))
 }

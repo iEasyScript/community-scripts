@@ -1,33 +1,37 @@
 package com.projectx.script.impl.devin.leagues
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import com.projectx.game.interfaces.IFSlot
 import com.projectx.game.interfaces.actionbarSlots
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.EnumConfigItem
 import com.projectx.script.IntConfigItem
 import com.projectx.script.Script
 import com.projectx.script.ScriptCategory
 import com.projectx.script.ScriptDescription
+import com.projectx.script.api.SkillTracker
+import com.projectx.script.api.SkillTrackerReadout
+import com.projectx.script.api.SkillTrackerSnapshot
 import com.projectx.script.api.continueDialogueContaining
 import com.projectx.script.api.dialogueOptionVisible
 import com.projectx.script.api.findClosestNPC
 import com.projectx.script.api.findClosestObject
-import com.projectx.script.api.getXp
 import com.projectx.script.api.interfaces
 import com.projectx.script.api.varps
 import com.projectx.script.api.waitUntilNotMoving
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.separator
-import com.projectx.ui.backend.dsl.scopes.table
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.textWrapped
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.dsl.utils.ImGuiTableColumnFlags
-import com.projectx.ui.backend.dsl.utils.ImGuiTableFlags
-import com.projectx.ui.backend.flags.ImGuiCond
-import com.projectx.util.formatElapsedTime
+import com.projectx.ui.compose.components.DataTable
+import com.projectx.ui.compose.components.Hint
+import com.projectx.ui.compose.components.Readout
+import com.projectx.ui.compose.components.TableColumn
+import com.projectx.ui.compose.theme.Palette
 import com.projectx.util.gaussian
-import com.projectx.util.getFormattedXpPerHour
 import org.projectx.core.game.combat.ActionBarModel
 import world.gregs.voidps.gameval.Gameval
 
@@ -41,8 +45,6 @@ private const val MAX_UNREADABLE_OFFERS = 3
 private const val DRAIN_SAMPLE_LIMIT = 8
 private const val MIN_DRAIN_SAMPLES = 3
 private const val RECLICK_DRAIN_TICKS = 2
-private const val WINDOW_WIDTH = 400f
-private const val WINDOW_HEIGHT = 500f
 
 /** Bootstrap pace only: the first [MIN_DRAIN_SAMPLES] timed drain ticks replace it with the station's real cadence. */
 private const val UNCALIBRATED_DRAIN_MS = 4_500L
@@ -52,14 +54,30 @@ private val TAGS = Regex("<[^>]*>")
 
 private data class ContributeOffer(val resource: String, val amount: Int, val xp: Int)
 
+private data class StationRow(val name: String, val workers: Int, val resource: String, val storedXp: Int)
+
+private data class IaiaBoard(
+    val station: String,
+    val stocked: Boolean,
+    val advanceTimeCharges: String,
+    val stations: List<StationRow>,
+)
+
+private val STATION_COLUMNS = listOf(
+    TableColumn("Station", 1.3f),
+    TableColumn("Workers", 0.7f, mono = true),
+    TableColumn("Resource", 1.2f),
+    TableColumn("Stored XP", 1f, mono = true),
+)
+
 @ScriptDescription(
     name = "Dream of Iaia Stations",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Devin",
     description = "Runs a Dream of Iaia station at the Anachronia base camp: keeps its stored XP draining, contributes resources, and casts Advance Time to replenish them.",
     category = ScriptCategory.OTHER
 )
-class IaiaSkillingStations : Script(), ConfigurableScript {
+class IaiaSkillingStations : Script(), ConfigurableScript, ComposePanel {
 
     private val selectedStation = EnumConfigItem(
         name = "Station",
@@ -75,11 +93,14 @@ class IaiaSkillingStations : Script(), ConfigurableScript {
         min = 0
     )
 
-    private var startTime = 0L
-    private var startingXp = 0
+    @Volatile
     private var trackedStation: IaiaStation? = null
-    private var contributions = 0
-    private var advanceTimeCasts = 0
+    @Volatile
+    private var tracker = SkillTracker(IaiaStation.APOTHECARY.skill)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val board by live<IaiaBoard?>(null, 500) { trackedStation?.let(::readBoard) }
+    private var contributions by mutableStateOf(0)
+    private var advanceTimeCasts by mutableStateOf(0)
     private var unproductiveCasts = 0
     private var unreadableOffers = 0
     private var lastStoredXp = -1
@@ -87,7 +108,7 @@ class IaiaSkillingStations : Script(), ConfigurableScript {
     private var lastChangeWasDrain = false
     private val drainIntervals = ArrayDeque<Long>()
     private var stallWindowMs = 0L
-    private var stopReason: String? = null
+    private var stopReason by mutableStateOf<String?>(null)
     private var lastReport = ""
 
     override fun onStart() = resetStats(selectedStation.value)
@@ -272,8 +293,7 @@ class IaiaSkillingStations : Script(), ConfigurableScript {
 
     private fun resetStats(station: IaiaStation) {
         trackedStation = station
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(station.skill)
+        tracker = SkillTracker(station.skill)
         lastStoredXp = -1
         lastDrainAt = 0L
         lastChangeWasDrain = false
@@ -302,36 +322,40 @@ class IaiaSkillingStations : Script(), ConfigurableScript {
         delay(1100, 450)
     }
 
-    override fun render() {
-        val station = trackedStation ?: return
-        ImGuiDsl.setNextWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT, ImGuiCond.FirstUseEver)
-        ImGuiDsl.window("Dream of Iaia Stations") {
-            text("${station.stationName} - ${station.skill.name.lowercase()}")
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(station.skill), startTime)}")
-            xpProgressBar(station.skill)
-            separator()
-            text("Stocked: ${varps.getVarBit(station.stockedVarbit) == 1}")
-            text("Advance Time charges: ${advanceTimeCharges()}")
-            separator()
-            table(id = "IaiaStations", columns = 4, flags = ImGuiTableFlags.SizingFixedFit) {
-                setupColumn("Station", ImGuiTableColumnFlags.WidthFixed, 100f)
-                setupColumn("Workers", ImGuiTableColumnFlags.WidthFixed, 70f)
-                setupColumn("Resource", ImGuiTableColumnFlags.WidthFixed, 90f)
-                setupColumn("Stored XP", ImGuiTableColumnFlags.WidthFixed, 90f)
-                headersRow()
-                IaiaStation.entries.forEach {
-                    nextRow()
-                    nextColumn(); text(it.stationName)
-                    nextColumn(); text("${varps.getVarBit(it.assignedWorkerVarbit)}")
-                    nextColumn(); text("${it.resourceLabel}: ${varps.getVar(it.resourceVarp)}")
-                    nextColumn(); text("${varps.getVarBit(it.storedXpVarbit)}")
-                }
+    private fun readBoard(station: IaiaStation) = IaiaBoard(
+        station = "${station.stationName} - ${station.skill.name.lowercase()}",
+        stocked = varps.getVarBit(station.stockedVarbit) == 1,
+        advanceTimeCharges = advanceTimeCharges(),
+        stations = IaiaStation.entries.map {
+            StationRow(
+                it.stationName,
+                varps.getVarBit(it.assignedWorkerVarbit),
+                "${it.resourceLabel}: ${varps.getVar(it.resourceVarp)}",
+                varps.getVarBit(it.storedXpVarbit)
+            )
+        }
+    )
+
+    @Composable
+    override fun Panel() {
+        val shown = board ?: return Hint("Starting")
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Readout(listOf("Station" to shown.station))
+            SkillTrackerReadout(progress)
+            Readout(
+                listOf(
+                    "Stocked" to if (shown.stocked) "Yes" else "No",
+                    "Advance Time charges" to shown.advanceTimeCharges,
+                )
+            )
+            DataTable(STATION_COLUMNS, shown.stations) { row ->
+                text(row.name)
+                text("${row.workers}")
+                text(row.resource)
+                text("${row.storedXp}")
             }
-            separator()
-            text("Contributions: $contributions")
-            text("Advance Time casts: $advanceTimeCasts")
-            stopReason?.let { textWrapped("STOPPED: $it") }
+            Readout(listOf("Contributions" to "$contributions", "Advance Time casts" to "$advanceTimeCasts"))
+            stopReason?.let { Hint("STOPPED: $it", color = Palette.stop) }
         }
     }
 

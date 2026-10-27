@@ -1,5 +1,10 @@
 package com.projectx.script.impl.trent.aiomining
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.game.bootstrap.Bootstrap
@@ -9,6 +14,7 @@ import com.projectx.game.nxt.entity.location.SceneObject
 import world.gregs.voidps.collision.ClipFlag
 import com.projectx.pathfinder.WorldCollision
 import com.projectx.pathfinder.routeToObject
+import com.projectx.script.ComposePanel
 import com.projectx.script.ScriptDescription
 import com.projectx.script.State
 import com.projectx.script.StateMachineScript
@@ -16,48 +22,45 @@ import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
 import com.projectx.script.event.impl.ManualDoAction
+import com.projectx.script.event.impl.XPDrop
 import com.projectx.traversal.Traversal
 import com.projectx.traversal.Traversal.Companion.traversal
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
+import com.projectx.ui.compose.components.Hint
+import com.projectx.ui.compose.components.Readout
 import com.projectx.util.*
 
 private val rockertunitySpotAnims = intArrayOf(7164, 7165)
 
 @ScriptDescription(
     name = "AIO Mining",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Trent",
     description = "AIO Mining. Click the rock you want to mine."
 )
-class AIOMining : StateMachineScript<AIOMining>() {
+class AIOMining : StateMachineScript<AIOMining>(), ComposePanel {
     lateinit var miningSpot: MiningSpot
     fun hasMiningSpot() = ::miningSpot.isInitialized
 
     lateinit var otherName: String
     fun hasOtherName() = ::otherName.isInitialized
 
-    var startTime = 0L
-    var startingXp = 0
-    var oresGained = 0
-
-    override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.MINING)
+    private val tracker = SkillTracker(Skill.MINING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val location by live<String?>(null) {
+        if (hasMiningSpot()) miningSpot.toString() else if (hasOtherName()) otherName else null
     }
 
-    override fun render() {
-        ImGuiDsl.window("AIO Mining") {
-            image(graphicTexture(GraphicIds.MINING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("Location: ${if (hasMiningSpot()) miningSpot else if (hasOtherName()) otherName else "None yet. Click a rock."}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.MINING), startTime)}")
-            text("Ores/h: ${getUnitsPerHour(oresGained, startTime)}")
-            xpProgressBar(Skill.MINING)
+    override fun onEvent(event: Event) {
+        super.onEvent(event)
+        if (event is XPDrop && event.skill == Skill.MINING) tracker.add("Ores")
+    }
+
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val spot = location
+            if (spot != null) Readout(listOf("Location" to spot)) else Hint("No location yet. Click a rock.")
+            SkillTrackerReadout(progress)
         }
     }
 

@@ -1,5 +1,10 @@
 package com.projectx.script.impl.devin
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import org.projectx.core.game.combat.Ability
@@ -9,26 +14,18 @@ import com.projectx.script.*
 import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.XPDrop
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
-import com.projectx.util.formatElapsedTime
+import com.projectx.ui.compose.components.Readout
 import com.projectx.util.gaussian
-import com.projectx.util.getFormattedXpPerHour
-import com.projectx.util.getUnitsPerHour
 import com.projectx.util.random
 
 @ScriptDescription(
     name = "Abyssal Runecrafting",
-    version = "1.0.0",
+    version = "1.1.0",
     author = "Devin",
     description = "Basic AIO runecrafting through the abyss.",
     visible = true
 )
-class AbyssRunecrafting : StateMachineScript<AbyssRunecrafting>(), ConfigurableScript {
+class AbyssRunecrafting : StateMachineScript<AbyssRunecrafting>(), ConfigurableScript, ComposePanel {
 
     private val rune = EnumConfigItem(
         name = "Runes",
@@ -43,13 +40,11 @@ class AbyssRunecrafting : StateMachineScript<AbyssRunecrafting>(), ConfigurableS
         initialValue = true
     )
 
-    var startTime = 0L
-    var startingXp = 0
     private var useFamiliar: Boolean = true
 
-    private var completedRuns = 0
-    private var totalRunes = 0
-    private var threadsObtained = 0
+    private val tracker = SkillTracker(Skill.RUNECRAFTING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val location by live("") { if (rune.value != Altar.SPIRIT) rune.value.displayName else "None yet. Select one." }
 
     private val cachedHasEssence = TickCached { inventory.any { it.name.endsWith(" essence") } }
     val hasEssence get() = cachedHasEssence.get()
@@ -70,11 +65,6 @@ class AbyssRunecrafting : StateMachineScript<AbyssRunecrafting>(), ConfigurableS
 
     private val cachedHasDamagedPouches = TickCached { false }
     val hasDamagedPouches get() = cachedHasDamagedPouches.get()
-
-    override fun onStart() {
-        startTime = System.currentTimeMillis()
-        startingXp = getXp(Skill.RUNECRAFTING)
-    }
 
     object TeleportToBank : State<AbyssRunecrafting>() {
         override suspend fun AbyssRunecrafting.checkNext(): State<AbyssRunecrafting>? {
@@ -339,11 +329,7 @@ class AbyssRunecrafting : StateMachineScript<AbyssRunecrafting>(), ConfigurableS
         }
 
         override fun AbyssRunecrafting.onStateEvent(event: Event) {
-            if (event is XPDrop && event.skill == Skill.RUNECRAFTING) {
-                completedRuns++
-                totalRunes += inventory.count("${rune.value.displayName} rune")
-                threadsObtained += inventory.count("Magical thread")
-            }
+            if (event is XPDrop && event.skill == Skill.RUNECRAFTING) recordRun()
         }
     }
 
@@ -375,26 +361,23 @@ class AbyssRunecrafting : StateMachineScript<AbyssRunecrafting>(), ConfigurableS
         }
 
         override fun AbyssRunecrafting.onStateEvent(event: Event) {
-            if (event is XPDrop && event.skill == Skill.RUNECRAFTING) {
-                completedRuns++
-                totalRunes += inventory.count("${rune.value.displayName} rune")
-                threadsObtained += inventory.count("Magical thread")
-            }
+            if (event is XPDrop && event.skill == Skill.RUNECRAFTING) recordRun()
         }
     }
 
     override fun getStartState(): State<AbyssRunecrafting> = BankForEssence
 
-    override fun render() {
-        ImGuiDsl.window("Abyss Runecrafting") {
-            image(graphicTexture(GraphicIds.RUNECRAFTING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("Location: ${if (rune.value != Altar.SPIRIT) rune.value.displayName else "None yet. Select one."}")
-            text("XP/hr: ${getFormattedXpPerHour(startingXp, getXp(Skill.RUNECRAFTING), startTime)}")
-            text("Runs/h: ${getUnitsPerHour(completedRuns, startTime)}")
-            text("Runes/h: ${getUnitsPerHour(totalRunes, startTime)}")
-            text("Threads/h: ${getUnitsPerHour(threadsObtained, startTime)}")
-            xpProgressBar(Skill.RUNECRAFTING)
+    private fun recordRun() {
+        tracker.add("Runs")
+        tracker.add("Runes", inventory.count("${rune.value.displayName} rune"))
+        tracker.add("Threads", inventory.count("Magical thread"))
+    }
+
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Readout(listOf("Location" to location))
+            SkillTrackerReadout(progress)
         }
     }
 

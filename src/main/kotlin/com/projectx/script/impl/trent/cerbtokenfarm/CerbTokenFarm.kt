@@ -1,10 +1,16 @@
 package com.projectx.script.impl.trent.cerbtokenfarm
 import com.projectx.game.tileOfSceneLocal
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import org.projectx.core.game.skill.Skill
 import world.gregs.voidps.type.Tile
 import com.projectx.game.chat.MessageType
 import com.projectx.game.nxt.entity.npc.NPC
+import com.projectx.script.ComposePanel
 import com.projectx.script.Script
 import com.projectx.script.ScriptDescription
 import com.projectx.script.State
@@ -13,24 +19,23 @@ import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
 import com.projectx.script.impl.trent.combatutils.optimizedNecromancyRevo
-import com.projectx.ui.backend.dsl.ImGuiDsl
-import com.projectx.ui.backend.dsl.scopes.image
-import com.projectx.ui.backend.dsl.scopes.text
-import com.projectx.ui.backend.dsl.scopes.xpProgressBar
-import com.projectx.ui.backend.native.GraphicIds
-import com.projectx.ui.backend.native.graphicTexture
+import com.projectx.ui.compose.components.Readout
 import com.projectx.util.*
 
 @ScriptDescription(
     name = "Cerberus Token Farmer",
-    version = "1.0.1",
+    version = "1.1.0",
     author = "Trent",
     description = "Kills Cerberus in OSRS from RS3"
 )
-class CerbTokenFarm : StateMachineScript<CerbTokenFarm>() {
+class CerbTokenFarm : StateMachineScript<CerbTokenFarm>(), ComposePanel {
     var startTime = 0L
     var startingXp = 0
     var totalTokensGained = 0
+
+    private val tracker = SkillTracker(Skill.DUNGEONEERING)
+    private val progress by live(SkillTrackerSnapshot()) { tracker.snapshot() }
+    private val details by live(emptyList<Pair<String, String>>()) { report() }
     
     override fun onStart() { 
         addParallelScript(CerbCombatRotation())
@@ -64,13 +69,21 @@ class CerbTokenFarm : StateMachineScript<CerbTokenFarm>() {
         }
     }
     
-    override fun render() {
-        ImGuiDsl.window("Cerberus Token Farm") {
-            image(graphicTexture(GraphicIds.DUNGEONEERING), 32f, 32f)
-            text("Runtime: ${formatElapsedTime(System.currentTimeMillis(), startTime)}")
-            text("Tokens/hr: ${format(tokensPerHour)}")
-            text("XP/hr (inc. tokens): ${format(tokensPerHour + getXpPerHour(startingXp, getXp(Skill.DUNGEONEERING), startTime))}")
-            xpProgressBar(Skill.DUNGEONEERING)
+    private fun report(): List<Pair<String, String>> {
+        if (startTime == 0L) return emptyList()
+        val xpPerHour = getXpPerHour(startingXp, getXp(Skill.DUNGEONEERING), startTime)
+        return listOf(
+            "Stage" to getCurrentStage(),
+            "Tokens/hr" to format(tokensPerHour),
+            "XP/hr (inc. tokens)" to format(tokensPerHour + xpPerHour),
+        )
+    }
+
+    @Composable
+    override fun Panel() {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (details.isNotEmpty()) Readout(details)
+            SkillTrackerReadout(progress)
         }
     }
 }

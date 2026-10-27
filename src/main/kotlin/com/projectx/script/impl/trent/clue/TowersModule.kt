@@ -74,16 +74,25 @@ class TowersModule : ClueModule {
 
     override fun render(scope: BackgroundDrawListScope) {
         val grid = rectOf(TOWERS_INTERFACE, GRID_COMPONENT) ?: return
-        if (solutions.isEmpty()) {
-            scope.panel(grid, listOf(name, "No grid satisfies these clues"), ImGuiColors.RED or (255 shl 24))
-            return
-        }
+        if (solutions.isEmpty()) return
         val settled = settled()
         with(scope) {
             for (cell in 0 until SIZE * SIZE) {
                 drawCell(cellOf(grid, SIZE, SIZE, cell), settled[cell], entered.getOrElse(cell) { 0 }, cell)
             }
-            panel(grid, lines(settled), accent(settled))
+        }
+    }
+
+    override fun readout(): ClueReadout? {
+        rectOf(TOWERS_INTERFACE, GRID_COMPONENT) ?: return null
+        val target = solutions.firstOrNull()
+            ?: return ClueReadout(name, "Unsolvable", ClueTone.FAILED, listOf("No grid satisfies these clues"))
+        val left = target.indices.count { entered[it] != target[it] }
+        val lines = lines(settled(), left)
+        return when {
+            left > 0 -> ClueReadout(name, "$left cells", ClueTone.WORKING, lines)
+            solutions.size > 1 -> ClueReadout(name, "Solved", ClueTone.UNSURE, lines)
+            else -> ClueReadout(name, "Solved", ClueTone.DONE, lines)
         }
     }
 
@@ -121,11 +130,8 @@ class TowersModule : ClueModule {
 
     private fun varbit(id: Int) = runCatching { varps.getVarBit(id) }.getOrDefault(0)
 
-    private fun lines(settled: IntArray) = buildList {
-        add(name)
+    private fun lines(settled: IntArray, left: Int) = buildList {
         if (solutions.size > 1) add("${solutions.size} grids fit these clues")
-        val target = solutions.first()
-        val left = target.indices.count { entered[it] != target[it] }
         if (left == 0) add("Solved - press Check") else add("$left cells to place")
         for (row in 0 until SIZE) {
             add((0 until SIZE).joinToString(" ") { col ->
@@ -134,10 +140,4 @@ class TowersModule : ClueModule {
             })
         }
     }
-
-    private fun accent(settled: IntArray) = when {
-        solutions.first().indices.any { entered[it] != solutions.first()[it] } -> ImGuiColors.CYAN
-        solutions.size > 1 -> ImGuiColors.YELLOW
-        else -> ImGuiColors.GREEN
-    } or (255 shl 24)
 }

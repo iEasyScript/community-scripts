@@ -80,11 +80,21 @@ class CompassModule : ClueModule {
             } else {
                 edgeBearing(here, destination, color, readout)
             }
-            if (panelInterface >= 0) {
-                if (canExcavate) rectOf(panelInterface, DIG_ICON_LAYER)?.let { outline(it, color, thickness = 3f, pad = 3f) }
-                rectOf(panelInterface, 0)?.let { panel(it, lines(destination, readout), color) }
+            if (panelInterface >= 0 && canExcavate) {
+                rectOf(panelInterface, DIG_ICON_LAYER)?.let { outline(it, color, thickness = 3f, pad = 3f) }
             }
         }
+    }
+
+    override fun readout(): ClueReadout? {
+        val destination = target ?: return null
+        val here = runCatching { localPlayer.tile }.getOrNull() ?: return null
+        val lines = listOf(
+            "Dig at ${destination.x}, ${destination.y}${if (destination.level > 0) " lvl ${destination.level}" else ""}",
+            readout(here, destination),
+        )
+        return if (canExcavate) ClueReadout(name, "Dig here", ClueTone.DONE, lines)
+        else ClueReadout(name, "Travelling", ClueTone.WORKING, lines)
     }
 
     private fun destination(): Tile? =
@@ -101,12 +111,6 @@ class CompassModule : ClueModule {
         val dx = destination.x - here.x
         val dy = destination.y - here.y
         return "${max(abs(dx), abs(dy))} tiles ${compassPoint(dx, dy)}"
-    }
-
-    private fun lines(destination: Tile, readout: String) = buildList {
-        add(name)
-        add("Dig at ${destination.x}, ${destination.y}${if (destination.level > 0) " lvl ${destination.level}" else ""}")
-        add(readout)
     }
 
     private fun compassPoint(dx: Int, dy: Int): String {

@@ -1,6 +1,9 @@
 package com.projectx.script.impl.trent.clue
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import com.projectx.script.BooleanConfigItem
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigSection
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.Script
@@ -22,12 +25,12 @@ private const val IDLE_GRACE_MS = 4_000L
  */
 @ScriptDescription(
     name = "Clue Helper",
-    version = "1.0",
+    version = "1.1",
     author = "trent",
     description = "Highlights and optionally solves Treasure Trails puzzles and steps.",
     category = ScriptCategory.OTHER,
 )
-class ClueHelper : Script(), ConfigurableScript {
+class ClueHelper : Script(), ConfigurableScript, ComposePanel {
 
     val autoSolve = BooleanConfigItem(
         "Auto-solve puzzles",
@@ -54,6 +57,13 @@ class ClueHelper : Script(), ConfigurableScript {
 
     private var nextActionAt = 0L
     private val idleSince = HashMap<ClueModule, Long>()
+
+    private val hud by live(ClueHud()) {
+        ClueHud(autoSolve.value, modules.filter { it.first.value }.mapNotNull { it.second.readout() })
+    }
+
+    @Composable
+    override fun Panel() = CluePanel(hud)
 
     /**
      * A step's interface drops out of layout for a frame or two all the time - scene loads, resizes,

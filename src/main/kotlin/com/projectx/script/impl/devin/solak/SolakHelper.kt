@@ -1,24 +1,24 @@
 package com.projectx.script.impl.devin.solak
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.projectx.game.highlight.EntityHighlight
 import com.projectx.game.nxt.entity.npc.NPC
 import com.projectx.script.BooleanConfigItem
+import com.projectx.script.ComposePanel
 import com.projectx.script.ConfigSection
 import com.projectx.script.ConfigurableScript
 import com.projectx.script.Script
 import com.projectx.script.ScriptCategory
 import com.projectx.script.ScriptDescription
-import com.projectx.ui.backend.dsl.ImGuiDsl.setNextWindowPos
-import com.projectx.ui.backend.dsl.ImGuiDsl.setNextWindowSize
-import com.projectx.ui.backend.dsl.ImGuiDsl.window
-import com.projectx.ui.backend.flags.ImGuiCond
-import com.projectx.ui.backend.flags.WindowFlags
-import com.projectx.ui.backend.native.NativeBridge
+import com.projectx.ui.compose.components.Hint
 import java.util.Locale
 
 @ScriptDescription(
     name = "Solak Helper",
-    version = "0.1.0",
+    version = "0.2.0",
     author = "Devin",
     description = "Read-only mechanic HUD for Solak, Guardian of the Grove: Blight stacks, the tracked health bar " +
         "scaled to your team size, Solak's and the limbs' lifepoints, Nature's Blessing readiness, the current " +
@@ -27,10 +27,10 @@ import java.util.Locale
     visible = false,
     category = ScriptCategory.BOSSES
 )
-class SolakHelper : Script(), ConfigurableScript {
+class SolakHelper : Script(), ConfigurableScript, ComposePanel {
 
     val displaySection = ConfigSection("Display")
-    val showHud = BooleanConfigItem("Mechanic HUD", "The draggable, resizable coach card.", true)
+    val showHud = BooleanConfigItem("Mechanic HUD", "The coach card.", true)
     val showEncounterStatus = BooleanConfigItem(
         "Encounter status",
         "Encounter liveness, team size and the rootling / lasher count.",
@@ -58,8 +58,7 @@ class SolakHelper : Script(), ConfigurableScript {
         false
     )
 
-    @Volatile
-    private var hud: SolakHudData? = null
+    private var hud by mutableStateOf<SolakHudData?>(null)
 
     @Volatile
     private var targets: List<OutlineTarget> = emptyList()
@@ -88,20 +87,15 @@ class SolakHelper : Script(), ConfigurableScript {
         delay(LOOP_DELAY_MS)
     }
 
-    override fun render() {
-        if (showHud.value) drawHud()
-        drawOutlines()
-    }
+    override fun render() = drawOutlines()
 
-    private fun drawHud() {
-        val data = hud ?: return
-        val (screenW, _) = runCatching { NativeBridge.getDisplaySize() }.getOrDefault(0f to 0f)
-        if (screenW > 0f) {
-            setNextWindowPos(screenW * 0.5f - SolakHudRenderer.DEFAULT_WIDTH * 0.5f, PANEL_TOP, ImGuiCond.FirstUseEver)
-        }
-        setNextWindowSize(SolakHudRenderer.DEFAULT_WIDTH, SolakHudRenderer.DEFAULT_HEIGHT, ImGuiCond.FirstUseEver)
-        window("Solak##solak-hud", HUD_WINDOW_FLAGS) {
-            windowDraw { drawList, x, y, width, _ -> SolakHudRenderer.draw(data, drawList, x, y, width) }
+    @Composable
+    override fun Panel() {
+        val data = hud
+        when {
+            !showHud.value -> Hint("Mechanic HUD is off in settings")
+            data == null -> Hint("Waiting for the encounter")
+            else -> SolakHud(data)
         }
     }
 
@@ -111,24 +105,24 @@ class SolakHelper : Script(), ConfigurableScript {
         } else null
         val note = if (showDpsWindow.value) dpsWindowNote(state) else null
         val lines = ArrayList<Pair<String, Int>>(2)
-        if (showEncounterStatus.value) lines += statusLine(state) to SolakHudRenderer.MUTED
+        if (showEncounterStatus.value) lines += statusLine(state) to SolakHudColors.MUTED
         if (showBlessing.value) lines += blessingLine(state)
         val bars = ArrayList<SolakHudData.Bar>(5)
         val trackedShowsCore = showTrackedBar.value && state.trackedBar?.tracksCore == true
-        if (showTrackedBar.value) state.trackedBar?.let { bars += bar(it.label, it.lifepoints, it.maxLifepoints, SolakHudRenderer.TRACKED_BAR) }
+        if (showTrackedBar.value) state.trackedBar?.let { bars += bar(it.label, it.lifepoints, it.maxLifepoints, SolakHudColors.TRACKED_BAR) }
         if (showBossHealth.value) {
             if (state.coreLifepoints > 0 && !trackedShowsCore) {
-                bars += bar("BLIGHT-AFFLICTED CORE", state.coreLifepoints, state.coreMaxLifepoints, SolakHudRenderer.TRACKED_BAR)
+                bars += bar("BLIGHT-AFFLICTED CORE", state.coreLifepoints, state.coreMaxLifepoints, SolakHudColors.TRACKED_BAR)
             }
-            if (state.bossLifepoints > 0) bars += bar("SOLAK", state.bossLifepoints, bossMax(state), SolakHudRenderer.BOSS_BAR)
-            for (limb in state.limbs) bars += bar(limb.limb.label, limb.lifepoints, limb.maxLifepoints, SolakHudRenderer.LIMB_BAR)
+            if (state.bossLifepoints > 0) bars += bar("SOLAK", state.bossLifepoints, bossMax(state), SolakHudColors.BOSS_BAR)
+            for (limb in state.limbs) bars += bar(limb.limb.label, limb.lifepoints, limb.maxLifepoints, SolakHudColors.LIMB_BAR)
         }
         val headline = headline(state)
         if (headline == null && instruction == null && note == null && lines.isEmpty() && bars.isEmpty()) return null
         return SolakHudData(
             headline = headline ?: "SOLAK",
-            headlineAccent = if ((state.blightStacks ?: 0) > 0) SolakHudRenderer.WARNING else SolakHudRenderer.NEUTRAL_ACCENT,
-            badge = if (showEncounterStatus.value && state.teamSize > 0) "TEAM ${state.teamSize}" to SolakHudRenderer.NEUTRAL_ACCENT else null,
+            headlineAccent = if ((state.blightStacks ?: 0) > 0) SolakHudColors.WARNING else SolakHudColors.NEUTRAL_ACCENT,
+            badge = if (showEncounterStatus.value && state.teamSize > 0) "TEAM ${state.teamSize}" to SolakHudColors.NEUTRAL_ACCENT else null,
             instruction = instruction,
             note = note,
             lines = lines,
@@ -144,8 +138,8 @@ class SolakHelper : Script(), ConfigurableScript {
 
     private fun dpsWindowNote(state: SolakState): Pair<String, Int>? {
         val window = state.dpsWindow ?: return null
-        val focus = state.focusLimb ?: return "${window.label} OPEN" to SolakHudRenderer.GOOD
-        return "${window.label} OPEN - hit ${focus.limb.label}" to SolakHudRenderer.GOOD
+        val focus = state.focusLimb ?: return "${window.label} OPEN" to SolakHudColors.GOOD
+        return "${window.label} OPEN - hit ${focus.limb.label}" to SolakHudColors.GOOD
     }
 
     private fun statusLine(state: SolakState): String {
@@ -157,9 +151,9 @@ class SolakHelper : Script(), ConfigurableScript {
     }
 
     private fun blessingLine(state: SolakState): Pair<String, Int> = when {
-        state.extraActionArmed -> "NATURE'S BLESSING - EXTRA ACTION ARMED" to SolakHudRenderer.GOOD
-        state.blessingReady -> "NATURE'S BLESSING READY" to SolakHudRenderer.GOOD
-        else -> "NATURE'S BLESSING SPENT" to SolakHudRenderer.MUTED
+        state.extraActionArmed -> "NATURE'S BLESSING - EXTRA ACTION ARMED" to SolakHudColors.GOOD
+        state.blessingReady -> "NATURE'S BLESSING READY" to SolakHudColors.GOOD
+        else -> "NATURE'S BLESSING SPENT" to SolakHudColors.MUTED
     }
 
     private fun bar(label: String, lifepoints: Int, max: Int, color: Int): SolakHudData.Bar {
@@ -172,9 +166,9 @@ class SolakHelper : Script(), ConfigurableScript {
         state.boss?.let { runCatching { it.maxHealth }.getOrDefault(0) } ?: 0
 
     private fun severityColor(severity: Severity): Int = when (severity) {
-        Severity.CRITICAL -> SolakHudRenderer.CRITICAL
-        Severity.WARNING -> SolakHudRenderer.WARNING
-        Severity.INFO -> SolakHudRenderer.INFO
+        Severity.CRITICAL -> SolakHudColors.CRITICAL
+        Severity.WARNING -> SolakHudColors.WARNING
+        Severity.INFO -> SolakHudColors.INFO
     }
 
     private fun outlineTargets(state: SolakState): List<OutlineTarget> {
@@ -219,13 +213,9 @@ class SolakHelper : Script(), ConfigurableScript {
 
     private companion object {
         const val LOOP_DELAY_MS = 60
-        const val PANEL_TOP = 60f
         const val OUTLINE_SCALE = 5
         const val CORE_RGB = 0xFFC24A
         const val LIMB_RGB = 0x30D158
         const val ROOTLING_RGB = 0xFF7A3B
-
-        val HUD_WINDOW_FLAGS = WindowFlags.NoTitleBar + WindowFlags.NoBackground + WindowFlags.NoScrollbar +
-            WindowFlags.NoScrollWithMouse + WindowFlags.NoCollapse + WindowFlags.NoFocusOnAppearing
     }
 }

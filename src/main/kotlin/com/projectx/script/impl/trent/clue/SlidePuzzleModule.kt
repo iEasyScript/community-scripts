@@ -68,7 +68,20 @@ class SlidePuzzleModule : ClueModule {
             moves.take(LOOKAHEAD).forEachIndexed { index, move ->
                 drawMove(cellOf(grid, source.rows, source.cols, move.tileSlot), move.direction, index + 1)
             }
-            panel(grid, lines(), accent())
+        }
+    }
+
+    override fun readout(): ClueReadout? {
+        rectOf(source.interfaceId, source.gridComponentId) ?: return null
+        return when {
+            !solvable -> ClueReadout(name, "Unsolvable", ClueTone.FAILED, listOf("Board is unsolvable"))
+            moves.isEmpty() -> ClueReadout(name, "Solved", ClueTone.DONE, emptyList())
+            else -> ClueReadout(
+                name,
+                "${moves.size} moves",
+                ClueTone.WORKING,
+                listOf("${moves.size} moves left") + moves.take(LOOKAHEAD).mapIndexed { index, move -> "${index + 1}. ${move.direction}" },
+            )
         }
     }
 
@@ -94,22 +107,4 @@ class SlidePuzzleModule : ClueModule {
         )
         text(Vector2f(cell.x + 4f, cell.y + 1f), color, ordinal.toString())
     }
-
-    private fun lines() = buildList {
-        add(name)
-        when {
-            !solvable -> add("Board is unsolvable")
-            moves.isEmpty() -> add("Solved")
-            else -> {
-                add("${moves.size} moves left")
-                moves.take(LOOKAHEAD).forEachIndexed { index, move -> add("${index + 1}. ${move.direction}") }
-            }
-        }
-    }
-
-    private fun accent() = when {
-        !solvable -> ImGuiColors.RED
-        moves.isEmpty() -> ImGuiColors.GREEN
-        else -> ImGuiColors.CYAN
-    } or (255 shl 24)
 }

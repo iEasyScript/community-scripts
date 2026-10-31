@@ -1,18 +1,22 @@
 package com.projectx.script.impl.trent.presetbankstandmakex
 
 import com.projectx.game.chat.MessageType
+import com.projectx.game.interfaces.actionbarSlots
 import com.projectx.script.ScriptDescription
 import com.projectx.script.State
 import com.projectx.script.StateMachineScript
 import com.projectx.script.api.*
 import com.projectx.script.event.Event
 import com.projectx.script.event.impl.Chat
+import com.projectx.util.gaussian
 
-private const val OPEN_TRIES = 3
+private const val OPEN_TRIES = 4
+private const val MAIN_BAR = 1
+private const val MAKE_SLOT = 1
 
 @ScriptDescription(
     name = "Preset Bankstand Make-X",
-    version = "1.0.1",
+    version = "1.0.2",
     author = "Trent",
     description = "Makes X via bankstanding and presets for whatever using a defined key on actionbar"
 )
@@ -34,8 +38,9 @@ class Make: State<PresetBankStandMakeX>() {
                 stop()
                 return
             }
-            clickKey('1')
-            delayUntil(4500) { makeXOpen }
+            // A keybind press can miss, so alternate it with clicking the slot it is bound to.
+            if (tries % 2 == 1) actionbarSlots[MAIN_BAR]?.get(MAKE_SLOT)?.click(1) else clickKey('1')
+            delayUntil(gaussian(4500, 250_000).toLong()) { makeXOpen }
             return
         }
         continueMakeX()
@@ -50,7 +55,7 @@ class Bank: State<PresetBankStandMakeX>() {
     override suspend fun PresetBankStandMakeX.checkNext() = if (withdrawn) Make() else null
 
     override suspend fun PresetBankStandMakeX.stateLoop() {
-        interactClosestObject("Load Last Preset from")
+        loadLastPresetClosestBank()
         delay(1520, 852)
     }
 
